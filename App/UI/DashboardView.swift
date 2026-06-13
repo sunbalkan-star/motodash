@@ -21,22 +21,25 @@ struct DashboardView: View {
 
             Group {
                 if isPortrait {
-                    // ===== 縦: 上下分割 =====
+                    // ===== 縦: 上下分割(時刻は最上部に独立) =====
                     VStack(spacing: 0) {
+                        clockView
+                            .padding(.top, 8)
+                            .padding(.bottom, 4)
                         speedPane
-                            .frame(height: geo.size.height * 0.42)
+                            .frame(height: geo.size.height * 0.38)
                         Divider().background(Color.white.opacity(0.15))
-                        rightStack
+                        rightStack(showClock: false)
                             .padding(16)
                         Spacer(minLength: 0)
                     }
                 } else {
-                    // ===== 横: 左右分割 =====
+                    // ===== 横: 左右分割(時刻は右上) =====
                     HStack(spacing: 0) {
                         speedPane
                             .frame(width: geo.size.width * 0.45)
                         Divider().background(Color.white.opacity(0.15))
-                        rightStack
+                        rightStack(showClock: true)
                             .padding(16)
                     }
                 }
@@ -52,11 +55,11 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: 右側(縦では下側)— 時刻 + タイヤ + 統計
+    // MARK: 右側(縦では下側)— タイヤ + 統計(時刻は横画面のみここに表示)
 
-    private var rightStack: some View {
+    private func rightStack(showClock: Bool) -> some View {
         VStack(spacing: 12) {
-            clockView
+            if showClock { clockView }
             tirePanel(.front)
             tirePanel(.rear)
             statsRow
