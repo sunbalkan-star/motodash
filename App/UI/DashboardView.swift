@@ -58,8 +58,8 @@ struct DashboardView: View {
                     tirePanelCompact(.rear)
                     statsRow
                 }
-                .frame(width: geo.size.width * 0.34)
-                .position(x: geo.size.width * 0.80, y: geo.size.height * 0.5)
+                .frame(width: geo.size.width * 0.34, height: geo.size.height - 24)
+                .position(x: geo.size.width * 0.80, y: (geo.size.height - 24) / 2)
 
                 // 左下: 電圧/高度
                 HStack(spacing: 28) {
@@ -102,7 +102,8 @@ struct DashboardView: View {
                 tirePanelCompact(.rear)
                 statsRow.padding(.top, 4)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)   // ホームインジケーターを避ける
             Spacer(minLength: 0)
         }
     }
