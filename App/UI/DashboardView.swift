@@ -9,10 +9,6 @@ struct DashboardView: View {
     @EnvironmentObject var tpms: TPMSManager
     @State private var showSniffer = false
 
-    /// 1秒ごとに時刻を更新するタイマー
-    @State private var now = Date()
-    private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
     private let accent = Color(red: 0.65, green: 0.95, blue: 0.15) // ライムグリーン
 
     var body: some View {
@@ -48,7 +44,6 @@ struct DashboardView: View {
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
-        .onReceive(clock) { now = $0 }
         .sheet(isPresented: $showSniffer) {
             SnifferView()
                 .environmentObject(tpms)
@@ -67,13 +62,20 @@ struct DashboardView: View {
     }
 
     // MARK: 時刻表示(24時間)
+    // TimelineView(.periodic) で毎秒確実に再描画される(手動タイマー不要)
 
     private var clockView: some View {
-        Text(now, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
-            .font(.system(size: 24, weight: .semibold, design: .rounded))
-            .monospacedDigit()
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity, alignment: .center)
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(context.date, format: .dateTime
+                .hour(.twoDigits(amPM: .omitted))
+                .minute(.twoDigits)
+                .second(.twoDigits))
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.trailing, 4)
+        }
     }
 
     // MARK: 速度ペイン
