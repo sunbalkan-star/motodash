@@ -1,94 +1,125 @@
 import SwiftUI
 
-/// 参考モニター風の「逆L字」速度ゲージ。
-/// 左辺を下から上へ立ち上がり、左上角で曲がって上辺を右へ水平に走る。
-/// trim はパス全長基準で進むため、左辺/上辺の実長比を速度比に一致させ、
-/// 塗りと目盛りがズレないようにする。
+/// 参考モニター風の速度ゲージ。
+/// 形状: 左下から45°斜めで立ち上がり(〜40km/h)→ 縦辺を上へ →
+///       左上角 → 上辺を右端まで水平。現在速度まで塗りが伸びる。
 struct SpeedGauge: View {
     let speedKMH: Double
     let maxKMH: Double
     let accent: Color
 
-    /// 角に対応する速度(画像では左辺=20〜40なので角は40km/h)
-    private let cornerSpeed: Double = 40
+    /// 斜め区間の上端に対応する速度(画像では斜めが20〜40)
+    private let bevelEndSpeed: Double = 40
 
     private let ticks: [Int] = [20, 40, 60, 80, 100, 120]
 
     private var progress: Double { min(max(speedKMH / maxKMH, 0), 1) }
-    private var cornerFraction: Double { cornerSpeed / maxKMH }  // 全長に占める左辺の割合
 
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
             let lineWidth = min(w, h) * 0.16
-            let half = lineWidth / 2
-
-            // 左辺と上辺の幾何長
-            let vLen = h - half          // 左辺の長さ(下端→角)
-            let hLen = w - half          // 上辺の長さ(角→右端)
-            // trim を速度比に合わせるため、描画上の辺長を比率調整する係数
-            // (左辺が全速度の cornerFraction を担当するようパスの点を配置)
+            let pts = vertices(w: w, h: h, lineWidth: lineWidth)
+            let segs = segmentLengths(pts)
 
             ZStack {
-                LShape(half: half)
+                GaugePath(points: pts)
                     .stroke(Color.white.opacity(0.12),
                             style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
-
-                LShape(half: half)
-                    .trim(from: 0, to: trimEnd(vLen: vLen, hLen: hLen))
+                GaugePath(points: pts)
+                    .trim(from: 0, to: trimEnd(segs: segs))
                     .stroke(accent,
                             style: StrokeStyle(lineWidth: lineWidth, lineJoin: .round))
                     .animation(.easeOut(duration: 0.3), value: progress)
 
                 ForEach(ticks, id: \.self) { tick in
-                    let pos = labelPosition(for: tick, w: w, h: h, half: half)
                     Text("\(tick)")
-                        .font(.system(size: lineWidth * 0.40, weight: .bold, design: .rounded))
+                        .font(.system(size: lineWidth * 0.38, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(Double(tick) <= speedKMH ? .black.opacity(0.75) : .gray.opacity(0.7))
-                        .position(pos)
+                        .position(labelPosition(for: tick, pts: pts, segs: segs))
                 }
             }
         }
     }
 
-    /// 速度progressを、左辺/上辺の実長比に変換したtrim終端値に直す。
-    /// 左辺は速度0..cornerFraction を担当、その実長比は vLen/(vLen+hLen)。
-    private func trimEnd(vLen: CGFloat, hLen: CGFloat) -> CGFloat {
-        let total = vLen + hLen
-        let vShare = Double(vLen / total)   // 左辺がパス全長に占める比
-        if progress <= cornerFraction {
-            let t = progress / cornerFraction          // 左辺内 0..1
-            return CGFloat(t * vShare)
+    // 4頂点: [斜め下端, 斜め上端, 左上角, 右端]
+    private func vertices(w: CGFloat, h: CGFloat, lineWidth: CGFloat) -> [CGPoint] {
+        let half = lineWidth / 2
+        let bevel = min(w, h) * 0.16
+        return [
+            CGPoint(x: half, y: h - half),                 // 0 斜め下端
+            CGPoint(x: half + bevel, y: h - half - bevel), // 1 斜め上端
+            CGPoint(x: half + bevel, y: half),             // 2 左上角
+            CGPoint(x: w - half, y: half)                  // 3 右端
+        ]
+    }
+
+    // 各区間長 [斜め, 縦, 横]
+    private func segmentLengths(_ p: [CGPoint]) -> [CGFloat] {
+        [
+            hypot(p[1].x - p[0].x, p[1].y - p[0].y),
+            hypot(p[2].x - p[1].x, p[2].y - p[1].y),
+            hypot(p[3].x - p[2].x, p[3].y - p[2].y)
+        ]
+    }
+
+    /// 速度を担当区間に割り当て、パス全長比(trim終端)に変換
+    private func trimEnd(segs: [CGFloat]) -> CGFloat {
+        let total = segs.reduce(0, +)
+        guard total > 0 else { return 0 }
+        let sBevel = segs[0] / total
+        let sVert = segs[1] / total
+
+        // 速度の区間境界: 斜め=0..40、残り(40..120)を縦長:横長で按分
+        let vertHorizSplit = Double(segs[1] / (segs[1] + segs[2]))
+        let vertEndSpeed = bevelEndSpeed + (maxKMH - bevelEndSpeed) * vertHorizSplit
+
+        if speedKMH <= bevelEndSpeed {
+            let t = speedKMH / bevelEndSpeed
+            return CGFloat(t) * sBevel
+        } else if speedKMH <= vertEndSpeed {
+            let t = (speedKMH - bevelEndSpeed) / (vertEndSpeed - bevelEndSpeed)
+            return sBevel + CGFloat(t) * sVert
         } else {
-            let t = (progress - cornerFraction) / (1 - cornerFraction)  // 上辺内 0..1
-            return CGFloat(vShare + t * (1 - vShare))
+            let t = (speedKMH - vertEndSpeed) / (maxKMH - vertEndSpeed)
+            return sBevel + sVert + CGFloat(min(t, 1)) * (1 - sBevel - sVert)
         }
     }
 
-    private func labelPosition(for tick: Int, w: CGFloat, h: CGFloat, half: CGFloat) -> CGPoint {
-        let frac = Double(tick) / maxKMH
-        if frac <= cornerFraction {
-            let t = frac / cornerFraction
-            let y = h - (h - half) * CGFloat(t)
-            return CGPoint(x: half, y: min(max(y, half), h - half))
+    private func labelPosition(for tick: Int, pts: [CGPoint], segs: [CGFloat]) -> CGPoint {
+        let v = Double(tick)
+        let vertHorizSplit = Double(segs[1] / (segs[1] + segs[2]))
+        let vertEndSpeed = bevelEndSpeed + (maxKMH - bevelEndSpeed) * vertHorizSplit
+
+        if v <= bevelEndSpeed {
+            let t = v / bevelEndSpeed
+            return lerp(pts[0], pts[1], CGFloat(t))
+        } else if v <= vertEndSpeed {
+            let t = (v - bevelEndSpeed) / (vertEndSpeed - bevelEndSpeed)
+            return lerp(pts[1], pts[2], CGFloat(t))
         } else {
-            let t = (frac - cornerFraction) / (1 - cornerFraction)
-            let x = half + (w - half) * CGFloat(t)
-            return CGPoint(x: min(max(x, half), w - half), y: half)
+            let t = (v - vertEndSpeed) / (maxKMH - vertEndSpeed)
+            return lerp(pts[2], pts[3], CGFloat(t))
         }
+    }
+
+    private func lerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
     }
 }
 
-/// 逆L字パス: 下端(左)→上(角)→右端。trimはこの順で進む。
-private struct LShape: Shape {
-    let half: CGFloat
+/// 斜め→縦→横の折れ線パス。trimはこの順で進む。
+private struct GaugePath: Shape {
+    var points: [CGPoint]
     func path(in rect: CGRect) -> Path {
         Path { p in
-            p.move(to: CGPoint(x: half, y: rect.maxY))
-            p.addLine(to: CGPoint(x: half, y: half))
-            p.addLine(to: CGPoint(x: rect.maxX, y: half))
+            guard points.count == 4 else { return }
+            p.move(to: points[0])
+            p.addLine(to: points[1])
+            p.addLine(to: points[2])
+            p.addLine(to: points[3])
         }
     }
 }

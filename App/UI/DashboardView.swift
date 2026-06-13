@@ -31,45 +31,42 @@ struct DashboardView: View {
     private func landscapeLayout(_ geo: GeometryProxy) -> some View {
         VStack(spacing: 0) {
             topBar
-            HStack(spacing: 0) {
-                // 左〜上: 速度ゲージ + 速度数字
-                ZStack(alignment: .center) {
-                    SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("\(Int(ride.speedKMH))")
-                            .font(.system(size: 110, weight: .heavy, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundColor(.white)
-                            .minimumScaleFactor(0.4)
-                            .lineLimit(1)
-                        Text("KM/H")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                    }
-                    .offset(x: 20, y: 20)
-                    // 左下: 電圧/高度
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 28) {
-                            miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
-                            miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
-                            Spacer()
-                        }
-                        .padding(.leading, 24)
-                        .padding(.bottom, 6)
-                    }
-                }
-                .frame(width: geo.size.width * 0.56)
+            ZStack(alignment: .topLeading) {
+                // ゲージを全幅に敷く
+                SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
+                    .padding(.bottom, 44)   // 下端をバッテリー表示の上で止める
 
-                // 右: 空気圧(小)+ 統計
-                VStack(spacing: 10) {
+                // 速度数字 + KM/H(KM/Hは数字の上)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("KM/H")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.leading, 6)
+                    Text("\(Int(ride.speedKMH))")
+                        .font(.system(size: 120, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundColor(.white)
+                        .minimumScaleFactor(0.4)
+                        .lineLimit(1)
+                }
+                .position(x: geo.size.width * 0.30, y: geo.size.height * 0.42)
+
+                // 右側: 空気圧(右下)+ 統計(最下部)
+                VStack(spacing: 8) {
+                    Spacer()
                     tirePanelCompact(.front)
                     tirePanelCompact(.rear)
-                    Spacer(minLength: 4)
                     statsRow
                 }
-                .padding(.trailing, 16)
-                .padding(.vertical, 10)
+                .frame(width: geo.size.width * 0.34)
+                .position(x: geo.size.width * 0.80, y: geo.size.height * 0.5)
+
+                // 左下: 電圧/高度
+                HStack(spacing: 28) {
+                    miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
+                    miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
+                }
+                .position(x: geo.size.width * 0.16, y: geo.size.height - 20)
             }
         }
     }
