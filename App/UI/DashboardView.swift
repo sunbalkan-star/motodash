@@ -83,15 +83,23 @@ struct DashboardView: View {
     private var speedPane: some View {
         VStack(spacing: 4) {
             Spacer()
-            Text("\(Int(ride.speedKMH))")
-                .font(.system(size: 130, weight: .heavy, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(.white)
-                .minimumScaleFactor(0.4)
-                .lineLimit(1)
-            Text("KM/H")
-                .font(.headline)
-                .foregroundColor(accent)
+            // ゲージと速度数値を重ねる
+            ZStack {
+                SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
+                    .aspectRatio(1, contentMode: .fit)
+                VStack(spacing: 0) {
+                    Text("\(Int(ride.speedKMH))")
+                        .font(.system(size: 92, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundColor(.white)
+                        .minimumScaleFactor(0.4)
+                        .lineLimit(1)
+                    Text("KM/H")
+                        .font(.headline)
+                        .foregroundColor(accent)
+                }
+            }
+            .padding(.horizontal, 12)
             Spacer()
             HStack(spacing: 24) {
                 miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
