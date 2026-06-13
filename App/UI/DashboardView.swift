@@ -36,20 +36,20 @@ struct DashboardView: View {
                 SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
                     .padding(.bottom, 44)   // 下端をバッテリー表示の上で止める
 
-                // 速度数字 + KM/H(KM/Hは数字の上)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("KM/H")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .padding(.leading, 6)
+                // 速度数字 + KM/H(KM/Hは数字の右斜め上)
+                ZStack(alignment: .topTrailing) {
                     Text("\(Int(ride.speedKMH))")
                         .font(.system(size: 120, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(.white)
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
+                    Text("KM/H")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .offset(x: 54, y: 4)
                 }
-                .position(x: geo.size.width * 0.30, y: geo.size.height * 0.42)
+                .position(x: geo.size.width * 0.32, y: geo.size.height * 0.44)
 
                 // 右側: 空気圧(右下)+ 統計(最下部)
                 VStack(spacing: 8) {
@@ -58,8 +58,8 @@ struct DashboardView: View {
                     tirePanelCompact(.rear)
                     statsRow
                 }
-                .frame(width: geo.size.width * 0.34, height: geo.size.height - 24)
-                .position(x: geo.size.width * 0.80, y: (geo.size.height - 24) / 2)
+                .frame(width: geo.size.width * 0.34, height: geo.size.height - 40)
+                .position(x: geo.size.width * 0.80, y: (geo.size.height - 40) / 2)
 
                 // 左下: 電圧/高度
                 HStack(spacing: 28) {
@@ -78,7 +78,7 @@ struct DashboardView: View {
             topBar
             ZStack(alignment: .center) {
                 SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                ZStack(alignment: .topTrailing) {
                     Text("\(Int(ride.speedKMH))")
                         .font(.system(size: 90, weight: .heavy, design: .rounded))
                         .monospacedDigit()
@@ -86,6 +86,7 @@ struct DashboardView: View {
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
                     Text("KM/H").font(.subheadline).foregroundColor(.white)
+                        .offset(x: 42, y: 2)
                 }
                 .offset(x: 14, y: 14)
             }
@@ -103,7 +104,7 @@ struct DashboardView: View {
                 statsRow.padding(.top, 4)
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 24)   // ホームインジケーターを避ける
+            .padding(.bottom, 40)   // ホームインジケーターを避ける
             Spacer(minLength: 0)
         }
     }

@@ -20,7 +20,7 @@ struct SpeedGauge: View {
         GeometryReader { geo in
             let w = geo.size.width
             let h = geo.size.height
-            let lineWidth = min(w, h) * 0.16
+            let lineWidth = min(w, h) * 0.24   // 太さ(従来比+50%)
             let pts = vertices(w: w, h: h, lineWidth: lineWidth)
             let segs = segmentLengths(pts)
 
@@ -48,7 +48,7 @@ struct SpeedGauge: View {
     // 4頂点: [垂直下端, 垂直上端(斜め下端), 斜め上端(水平左端), 水平右端]
     private func vertices(w: CGFloat, h: CGFloat, lineWidth: CGFloat) -> [CGPoint] {
         let half = lineWidth / 2
-        let bevel = min(w, h) * 0.18          // 斜めの振り幅(水平=垂直、45°)
+        let bevel = min(w, h) * 0.22          // 斜めの振り幅(太さに合わせ拡大)
         let vBottom = CGPoint(x: half, y: h - half)        // 0 垂直下端
         let vTop = CGPoint(x: half, y: half + bevel)       // 1 垂直上端=斜め下端
         let hLeft = CGPoint(x: half + bevel, y: half)      // 2 斜め上端=水平左端
