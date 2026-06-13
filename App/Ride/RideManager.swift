@@ -36,6 +36,20 @@ final class RideManager: NSObject, ObservableObject {
 
         UIDevice.current.isBatteryMonitoringEnabled = true
         refreshBattery()
+
+        // 電池残量・充電状態の変化を購読(GPS更新に依存せず更新される)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(batteryChanged),
+            name: UIDevice.batteryLevelDidChangeNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(batteryChanged),
+            name: UIDevice.batteryStateDidChangeNotification, object: nil
+        )
+    }
+
+    @objc private func batteryChanged() {
+        refreshBattery()
     }
 
     func start() {
@@ -53,8 +67,14 @@ final class RideManager: NSObject, ObservableObject {
     }
 
     private func refreshBattery() {
-        let level = UIDevice.current.batteryLevel
-        phoneBatteryPercent = level >= 0 ? Int(level * 100) : 0
+        let device = UIDevice.current
+        // 充電完了(.full)時は batteryLevel が 1.0 未満を返すことがあるため補正
+        if device.batteryState == .full {
+            phoneBatteryPercent = 100
+            return
+        }
+        let level = device.batteryLevel
+        phoneBatteryPercent = level >= 0 ? Int((level * 100).rounded()) : 0
     }
 
     /// SharedStoreへ保存。ウィジェットのリロードは高頻度すぎると

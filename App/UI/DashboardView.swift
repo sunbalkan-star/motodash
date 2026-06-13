@@ -1,38 +1,76 @@
 import SwiftUI
 
-/// メインダッシュボード(横向き・黒背景・高コントラスト)
+/// メインダッシュボード(黒背景・高コントラスト)
+/// デバイスの向きに応じて横/縦レイアウトを自動で切り替える。
+///   横: 左=速度メーター / 右=タイヤ+統計
+///   縦: 上=速度メーター / 下=タイヤ+統計
 struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
     @State private var showSniffer = false
 
+    /// 1秒ごとに時刻を更新するタイマー
+    @State private var now = Date()
+    private let clock = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
     private let accent = Color(red: 0.65, green: 0.95, blue: 0.15) // ライムグリーン
 
     var body: some View {
         GeometryReader { geo in
-            HStack(spacing: 0) {
-                // ===== 左: 速度メーター =====
-                speedPane
-                    .frame(width: geo.size.width * 0.45)
+            let isPortrait = geo.size.height >= geo.size.width
 
-                Divider().background(Color.white.opacity(0.15))
-
-                // ===== 右: タイヤ + 走行統計 =====
-                VStack(spacing: 12) {
-                    tirePanel(.front)
-                    tirePanel(.rear)
-                    statsRow
+            Group {
+                if isPortrait {
+                    // ===== 縦: 上下分割 =====
+                    VStack(spacing: 0) {
+                        speedPane
+                            .frame(height: geo.size.height * 0.42)
+                        Divider().background(Color.white.opacity(0.15))
+                        rightStack
+                            .padding(16)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    // ===== 横: 左右分割 =====
+                    HStack(spacing: 0) {
+                        speedPane
+                            .frame(width: geo.size.width * 0.45)
+                        Divider().background(Color.white.opacity(0.15))
+                        rightStack
+                            .padding(16)
+                    }
                 }
-                .padding(16)
             }
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
+        .onReceive(clock) { now = $0 }
         .sheet(isPresented: $showSniffer) {
             SnifferView()
                 .environmentObject(tpms)
         }
+    }
+
+    // MARK: 右側(縦では下側)— 時刻 + タイヤ + 統計
+
+    private var rightStack: some View {
+        VStack(spacing: 12) {
+            clockView
+            tirePanel(.front)
+            tirePanel(.rear)
+            statsRow
+        }
+    }
+
+    // MARK: 時刻表示(24時間)
+
+    private var clockView: some View {
+        Text(now, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
+            .font(.system(size: 24, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     // MARK: 速度ペイン
@@ -51,10 +89,8 @@ struct DashboardView: View {
                 .foregroundColor(accent)
             Spacer()
             HStack(spacing: 24) {
-                miniStat(icon: "battery.75",
-                         value: "\(ride.phoneBatteryPercent)%")
-                miniStat(icon: "mountain.2.fill",
-                         value: "\(Int(ride.altitudeM))m")
+                miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
+                miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
             }
             Text(ride.gpsStatus)
                 .font(.caption2)
@@ -62,6 +98,17 @@ struct DashboardView: View {
                 .padding(.bottom, 10)
         }
         .padding(.horizontal, 8)
+    }
+
+    /// 電池残量に応じてアイコンを切り替え
+    private var batteryIcon: String {
+        switch ride.phoneBatteryPercent {
+        case 90...:  return "battery.100"
+        case 65..<90: return "battery.75"
+        case 40..<65: return "battery.50"
+        case 15..<40: return "battery.25"
+        default:      return "battery.0"
+        }
     }
 
     private func miniStat(icon: String, value: String) -> some View {
