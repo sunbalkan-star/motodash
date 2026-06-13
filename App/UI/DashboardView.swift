@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// メインダッシュボード(黒背景・高コントラスト)
-/// デバイスの向きに応じて横/縦レイアウトを自動で切り替える。
-///   横: 左=速度メーター / 右=タイヤ+統計
-///   縦: 上=速度メーター / 下=タイヤ+統計
+/// メインダッシュボード(黒背景・高コントラスト・参考モニター準拠)
+/// 横: 逆L字ゲージを左〜上に敷き、中央に速度、右に空気圧/統計。
+/// 縦: 上に速度+ゲージ、下に空気圧/統計。
 struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
@@ -14,109 +13,140 @@ struct DashboardView: View {
     var body: some View {
         GeometryReader { geo in
             let isPortrait = geo.size.height >= geo.size.width
-
             Group {
-                if isPortrait {
-                    // ===== 縦: 上下分割(時刻は最上部に独立) =====
-                    VStack(spacing: 0) {
-                        clockView
-                            .padding(.top, 8)
-                            .padding(.bottom, 4)
-                        speedPane
-                            .frame(height: geo.size.height * 0.38)
-                        Divider().background(Color.white.opacity(0.15))
-                        rightStack(showClock: false)
-                            .padding(16)
-                        Spacer(minLength: 0)
-                    }
-                } else {
-                    // ===== 横: 左右分割(時刻は右上) =====
-                    HStack(spacing: 0) {
-                        speedPane
-                            .frame(width: geo.size.width * 0.45)
-                        Divider().background(Color.white.opacity(0.15))
-                        rightStack(showClock: true)
-                            .padding(16)
-                    }
-                }
+                if isPortrait { portraitLayout(geo) }
+                else { landscapeLayout(geo) }
             }
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .sheet(isPresented: $showSniffer) {
-            SnifferView()
-                .environmentObject(tpms)
+            SnifferView().environmentObject(tpms)
         }
     }
 
-    // MARK: 右側(縦では下側)— タイヤ + 統計(時刻は横画面のみここに表示)
+    // MARK: - 横レイアウト(メイン)
 
-    private func rightStack(showClock: Bool) -> some View {
-        VStack(spacing: 12) {
-            if showClock { clockView }
-            tirePanel(.front)
-            tirePanel(.rear)
-            statsRow
+    private func landscapeLayout(_ geo: GeometryProxy) -> some View {
+        VStack(spacing: 0) {
+            topBar
+            HStack(spacing: 0) {
+                // 左〜上: 速度ゲージ + 速度数字
+                ZStack(alignment: .center) {
+                    SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("\(Int(ride.speedKMH))")
+                            .font(.system(size: 110, weight: .heavy, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundColor(.white)
+                            .minimumScaleFactor(0.4)
+                            .lineLimit(1)
+                        Text("KM/H")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                    .offset(x: 20, y: 20)
+                    // 左下: 電圧/高度
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 28) {
+                            miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
+                            miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
+                            Spacer()
+                        }
+                        .padding(.leading, 24)
+                        .padding(.bottom, 6)
+                    }
+                }
+                .frame(width: geo.size.width * 0.56)
+
+                // 右: 空気圧(小)+ 統計
+                VStack(spacing: 10) {
+                    tirePanelCompact(.front)
+                    tirePanelCompact(.rear)
+                    Spacer(minLength: 4)
+                    statsRow
+                }
+                .padding(.trailing, 16)
+                .padding(.vertical, 10)
+            }
         }
     }
 
-    // MARK: 時刻表示(24時間)
-    // TimelineView(.periodic) で毎秒確実に再描画される(手動タイマー不要)
+    // MARK: - 縦レイアウト
 
-    private var clockView: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            Text(context.date, format: .dateTime
-                .hour(.twoDigits(amPM: .omitted))
-                .minute(.twoDigits)
-                .second(.twoDigits))
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-                .padding(.trailing, 4)
-        }
-    }
-
-    // MARK: 速度ペイン
-
-    private var speedPane: some View {
-        VStack(spacing: 4) {
-            Spacer()
-            // ゲージと速度数値を重ねる
-            ZStack {
+    private func portraitLayout(_ geo: GeometryProxy) -> some View {
+        VStack(spacing: 0) {
+            topBar
+            ZStack(alignment: .center) {
                 SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
-                    .aspectRatio(1, contentMode: .fit)
-                VStack(spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("\(Int(ride.speedKMH))")
-                        .font(.system(size: 92, weight: .heavy, design: .rounded))
+                        .font(.system(size: 90, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(.white)
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
-                    Text("KM/H")
-                        .font(.headline)
-                        .foregroundColor(accent)
+                    Text("KM/H").font(.subheadline).foregroundColor(.white)
                 }
+                .offset(x: 14, y: 14)
             }
-            .padding(.horizontal, 12)
-            Spacer()
+            .frame(height: geo.size.height * 0.40)
+
             HStack(spacing: 24) {
                 miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
                 miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
             }
-            Text(ride.gpsStatus)
-                .font(.caption2)
-                .foregroundColor(.gray)
-                .padding(.bottom, 10)
+            .padding(.vertical, 8)
+
+            VStack(spacing: 10) {
+                tirePanelCompact(.front)
+                tirePanelCompact(.rear)
+                statsRow.padding(.top, 4)
+            }
+            .padding(16)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 8)
     }
 
-    /// 電池残量に応じてアイコンを切り替え
+    // MARK: - 上部バー(戻る/ステータス/時刻)
+
+    private var topBar: some View {
+        HStack {
+            Image(systemName: "chevron.left")
+                .foregroundColor(.gray)
+            Spacer()
+            HStack(spacing: 18) {
+                Image(systemName: "wifi")
+                Text("GPS").font(.caption.bold())
+                Image(systemName: "dot.radiowaves.left.and.right")
+            }
+            .foregroundColor(.gray)
+            Spacer()
+            clockText
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.05))
+    }
+
+    // 24時間表示・右寄せ・毎秒更新
+    private var clockText: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            Text(context.date, format: .dateTime
+                .hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+                .font(.system(size: 18, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(.white)
+        }
+    }
+
+    // MARK: - 部品
+
     private var batteryIcon: String {
         switch ride.phoneBatteryPercent {
-        case 90...:  return "battery.100"
+        case 90...:   return "battery.100"
         case 65..<90: return "battery.75"
         case 40..<65: return "battery.50"
         case 15..<40: return "battery.25"
@@ -126,87 +156,66 @@ struct DashboardView: View {
 
     private func miniStat(icon: String, value: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundColor(accent)
-            Text(value)
-                .font(.title3.monospacedDigit())
-                .bold()
-                .foregroundColor(.white)
+            Image(systemName: icon).foregroundColor(accent)
+            Text(value).font(.title3.monospacedDigit()).bold().foregroundColor(.white)
         }
     }
 
-    // MARK: タイヤパネル
-
-    private func tirePanel(_ position: WheelPosition) -> some View {
+    /// 小型の空気圧パネル(重要度を下げて省スペース化)
+    private func tirePanelCompact(_ position: WheelPosition) -> some View {
         let reading = tpms.readings[position]
         let assigned = tpms.assignments[position] != nil
         let live = reading.map { !$0.isStale } ?? false
 
-        return HStack {
-            VStack(alignment: .leading, spacing: 2) {
+        return HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(position == .front ? "FRONT (BAR)" : "REAR (BAR)")
-                    .font(.caption2)
+                    .font(.system(size: 10))
                     .foregroundColor(.gray)
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(live ? String(format: "%.2f", reading!.pressureBar) : "-.--")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(pressureColor(reading, live: live))
                     Text(live ? "\(Int(reading!.temperatureC))°C" : "--°C")
-                        .font(.title3.monospacedDigit())
-                        .foregroundColor(.white.opacity(0.8))
+                        .font(.system(size: 14).monospacedDigit())
+                        .foregroundColor(.white.opacity(0.75))
                 }
             }
             Spacer()
-            VStack(spacing: 4) {
-                Image(systemName: live ? "dot.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                    .foregroundColor(live ? accent : .gray)
-                if !assigned {
-                    Text("未割当")
-                        .font(.caption2)
-                        .foregroundColor(.orange)
-                }
-                if let battery = reading?.batteryPercent, live {
-                    Text("🔋\(battery)%")
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                }
+            Image(systemName: live ? "bicycle" : "bicycle")
+                .font(.system(size: 18))
+                .foregroundColor(live ? accent : .gray.opacity(0.5))
+            if !assigned {
+                Text("未割当").font(.system(size: 9)).foregroundColor(.orange)
             }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.07)))
-        .onTapGesture { showSniffer = true }   // タップでセンサー割当画面へ
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)))
+        .onTapGesture { showSniffer = true }
     }
 
     private func pressureColor(_ reading: TPMSReading?, live: Bool) -> Color {
         guard live, let reading else { return .gray }
-        return reading.pressureBar < tpms.lowPressureThreshold ? .red : accent
+        return reading.pressureBar < tpms.lowPressureThreshold ? .red : .white
     }
-
-    // MARK: 走行統計
 
     private var statsRow: some View {
         HStack {
-            statItem(title: "Total",
-                     value: String(format: "%.0fkm", ride.totalMeters / 1000))
+            statItem("Total", String(format: "%.0fkm", ride.totalMeters / 1000))
             Spacer()
-            statItem(title: "Time", value: timeString(ride.ridingSeconds))
+            statItem("Time", timeString(ride.ridingSeconds))
             Spacer()
-            statItem(title: "Trip",
-                     value: String(format: "%.1fkm", ride.tripMeters / 1000))
-                .onLongPressGesture { ride.resetTrip() }  // 長押しでTripリセット
+            statItem("Trip", String(format: "%.1fkm", ride.tripMeters / 1000))
+                .onLongPressGesture { ride.resetTrip() }
         }
-        .padding(.horizontal, 6)
     }
 
-    private func statItem(title: String, value: String) -> some View {
+    private func statItem(_ title: String, _ value: String) -> some View {
         VStack(spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundColor(.gray)
-            Text(value)
-                .font(.headline.monospacedDigit())
-                .foregroundColor(.white)
+            Text(title).font(.system(size: 10)).foregroundColor(.gray)
+            Text(value).font(.subheadline.monospacedDigit()).foregroundColor(.white)
         }
     }
 
