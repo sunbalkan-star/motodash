@@ -1,0 +1,65 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [main]
+    # Swiftやプロジェクト定義に変更があった時だけビルド(README編集等でmacOS分を消費しない)
+    paths:
+      - "App/**"
+      - "Widget/**"
+      - "Shared/**"
+      - "project.yml"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:   # Actionsタブから手動実行も可能
+
+env:
+  SCHEME: MyApp
+  CONFIGURATION: Release
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project MyApp.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration "$CONFIGURATION" \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+          # 成果物の存在を最終確認
+          test -d "build/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
+
+      - name: Package IPA
+        run: |
+          APP_PATH="build/Build/Products/${CONFIGURATION}-iphoneos/${SCHEME}.app"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -qr "${SCHEME}-unsigned-${GITHUB_RUN_NUMBER}.ipa" Payload
+          ls -lh *.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.SCHEME }}-unsigned-ipa
+          path: "*.ipa"
+          retention-days: 14

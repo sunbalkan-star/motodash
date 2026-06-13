@@ -1,0 +1,68 @@
+name: MyApp
+options:
+  bundleIdPrefix: com.tadashi
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1"          # iPhoneのみ
+    CURRENT_PROJECT_VERSION: "1"
+    MARKETING_VERSION: "1.0"
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  MyApp:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    dependencies:
+      - target: MyWidgetExtension
+        embed: true
+    entitlements:
+      path: App/App.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tadashi.myapp
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: MyApp
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIRequiresFullScreen: true
+        UIBackgroundModes:
+          - location
+        NSLocationWhenInUseUsageDescription: "速度・高度・走行距離の計測に位置情報を使用します。"
+        NSBluetoothAlwaysUsageDescription: "TPMSタイヤ空気圧センサーの受信に使用します。"
+
+  MyWidgetExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Widget
+      - Shared
+    entitlements:
+      path: Widget/Widget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.tadashi.myapp
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: MyWidget
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tadashi.MyApp.widget
