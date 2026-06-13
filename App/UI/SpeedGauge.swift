@@ -1,15 +1,16 @@
 import SwiftUI
 
 /// 参考モニター風の速度ゲージ。
-/// 形状: 左下から45°斜めで立ち上がり(〜40km/h)→ 縦辺を上へ →
-///       左上角 → 上辺を右端まで水平。現在速度まで塗りが伸びる。
+/// 形状: 下から垂直に立ち上がり(0〜20km/h)→ 右斜め45°(20〜40)→
+///       上辺を右端まで水平(40〜120)。現在速度まで塗りが伸びる。
 struct SpeedGauge: View {
     let speedKMH: Double
     let maxKMH: Double
     let accent: Color
 
-    /// 斜め区間の上端に対応する速度(画像では斜めが20〜40)
-    private let bevelEndSpeed: Double = 40
+    /// 区間境界の速度
+    private let vertEndSpeed: Double = 20    // 垂直区間の上端
+    private let bevelEndSpeed: Double = 40   // 斜め区間の上端=水平の開始
 
     private let ticks: [Int] = [20, 40, 60, 80, 100, 120]
 
@@ -44,19 +45,18 @@ struct SpeedGauge: View {
         }
     }
 
-    // 4頂点: [斜め下端, 斜め上端, 左上角, 右端]
+    // 4頂点: [垂直下端, 垂直上端(斜め下端), 斜め上端(水平左端), 水平右端]
     private func vertices(w: CGFloat, h: CGFloat, lineWidth: CGFloat) -> [CGPoint] {
         let half = lineWidth / 2
-        let bevel = min(w, h) * 0.16
-        return [
-            CGPoint(x: half, y: h - half),                 // 0 斜め下端
-            CGPoint(x: half + bevel, y: h - half - bevel), // 1 斜め上端
-            CGPoint(x: half + bevel, y: half),             // 2 左上角
-            CGPoint(x: w - half, y: half)                  // 3 右端
-        ]
+        let bevel = min(w, h) * 0.18          // 斜めの振り幅(水平=垂直、45°)
+        let vBottom = CGPoint(x: half, y: h - half)        // 0 垂直下端
+        let vTop = CGPoint(x: half, y: half + bevel)       // 1 垂直上端=斜め下端
+        let hLeft = CGPoint(x: half + bevel, y: half)      // 2 斜め上端=水平左端
+        let hRight = CGPoint(x: w - half, y: half)         // 3 水平右端
+        return [vBottom, vTop, hLeft, hRight]
     }
 
-    // 各区間長 [斜め, 縦, 横]
+    // 各区間長 [垂直, 斜め, 水平]
     private func segmentLengths(_ p: [CGPoint]) -> [CGFloat] {
         [
             hypot(p[1].x - p[0].x, p[1].y - p[0].y),
@@ -65,43 +65,41 @@ struct SpeedGauge: View {
         ]
     }
 
-    /// 速度を担当区間に割り当て、パス全長比(trim終端)に変換
+    /// 速度をパス全長比(trim終端)に変換
     private func trimEnd(segs: [CGFloat]) -> CGFloat {
         let total = segs.reduce(0, +)
         guard total > 0 else { return 0 }
-        let sBevel = segs[0] / total
-        let sVert = segs[1] / total
+        let sVert = segs[0] / total
+        let sBevel = segs[1] / total
 
-        // 速度の区間境界: 斜め=0..40、残り(40..120)を縦長:横長で按分
-        let vertHorizSplit = Double(segs[1] / (segs[1] + segs[2]))
-        let vertEndSpeed = bevelEndSpeed + (maxKMH - bevelEndSpeed) * vertHorizSplit
-
-        if speedKMH <= bevelEndSpeed {
-            let t = speedKMH / bevelEndSpeed
-            return CGFloat(t) * sBevel
-        } else if speedKMH <= vertEndSpeed {
-            let t = (speedKMH - bevelEndSpeed) / (vertEndSpeed - bevelEndSpeed)
-            return sBevel + CGFloat(t) * sVert
+        if speedKMH <= vertEndSpeed {
+            let t = speedKMH / vertEndSpeed
+            return CGFloat(t) * sVert
+        } else if speedKMH <= bevelEndSpeed {
+            let t = (speedKMH - vertEndSpeed) / (bevelEndSpeed - vertEndSpeed)
+            return sVert + CGFloat(t) * sBevel
         } else {
-            let t = (speedKMH - vertEndSpeed) / (maxKMH - vertEndSpeed)
-            return sBevel + sVert + CGFloat(min(t, 1)) * (1 - sBevel - sVert)
+            let t = (speedKMH - bevelEndSpeed) / (maxKMH - bevelEndSpeed)
+            return sVert + sBevel + CGFloat(min(t, 1)) * (1 - sVert - sBevel)
         }
     }
 
     private func labelPosition(for tick: Int, pts: [CGPoint], segs: [CGFloat]) -> CGPoint {
         let v = Double(tick)
-        let vertHorizSplit = Double(segs[1] / (segs[1] + segs[2]))
-        let vertEndSpeed = bevelEndSpeed + (maxKMH - bevelEndSpeed) * vertHorizSplit
-
-        if v <= bevelEndSpeed {
-            let t = v / bevelEndSpeed
+        if v <= vertEndSpeed {
+            let t = v / vertEndSpeed
             return lerp(pts[0], pts[1], CGFloat(t))
-        } else if v <= vertEndSpeed {
-            let t = (v - bevelEndSpeed) / (vertEndSpeed - bevelEndSpeed)
+        } else if v <= bevelEndSpeed {
+            let t = (v - vertEndSpeed) / (bevelEndSpeed - vertEndSpeed)
             return lerp(pts[1], pts[2], CGFloat(t))
         } else {
-            let t = (v - vertEndSpeed) / (maxKMH - vertEndSpeed)
-            return lerp(pts[2], pts[3], CGFloat(t))
+            // 水平区間。右端(120)はゲージ内に収めるため少し内側に寄せる
+            let t = (v - bevelEndSpeed) / (maxKMH - bevelEndSpeed)
+            let pos = lerp(pts[2], pts[3], CGFloat(t))
+            if tick == Int(maxKMH) {
+                return CGPoint(x: pos.x - (segs[2] * 0.04), y: pos.y)
+            }
+            return pos
         }
     }
 
@@ -110,7 +108,7 @@ struct SpeedGauge: View {
     }
 }
 
-/// 斜め→縦→横の折れ線パス。trimはこの順で進む。
+/// 垂直→斜め→水平の折れ線パス。trimはこの順で進む。
 private struct GaugePath: Shape {
     var points: [CGPoint]
     func path(in rect: CGRect) -> Path {

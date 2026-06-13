@@ -158,38 +158,38 @@ struct DashboardView: View {
         }
     }
 
-    /// 小型の空気圧パネル(重要度を下げて省スペース化)
+    /// 空気圧パネル(右下・やや大きめ)
     private func tirePanelCompact(_ position: WheelPosition) -> some View {
         let reading = tpms.readings[position]
         let assigned = tpms.assignments[position] != nil
         let live = reading.map { !$0.isStale } ?? false
 
-        return HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(position == .front ? "FRONT (BAR)" : "REAR (BAR)")
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundColor(.gray)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(live ? String(format: "%.2f", reading!.pressureBar) : "-.--")
-                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(pressureColor(reading, live: live))
                     Text(live ? "\(Int(reading!.temperatureC))°C" : "--°C")
-                        .font(.system(size: 14).monospacedDigit())
+                        .font(.system(size: 18).monospacedDigit())
                         .foregroundColor(.white.opacity(0.75))
                 }
             }
             Spacer()
-            Image(systemName: live ? "bicycle" : "bicycle")
-                .font(.system(size: 18))
+            Image(systemName: "bicycle")
+                .font(.system(size: 24))
                 .foregroundColor(live ? accent : .gray.opacity(0.5))
             if !assigned {
-                Text("未割当").font(.system(size: 9)).foregroundColor(.orange)
+                Text("未割当").font(.system(size: 10)).foregroundColor(.orange)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
         .onTapGesture { showSniffer = true }
     }
 
