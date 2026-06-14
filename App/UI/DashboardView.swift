@@ -29,19 +29,23 @@ struct DashboardView: View {
     private func landscapeLayout(_ geo: GeometryProxy) -> some View {
         let w = geo.size.width
         let h = geo.size.height
-        return ZStack(alignment: .topLeading) {
-            // ゲージ: 上辺全幅 + 左を垂直に。下端はタイヤ表示の上で止める。
-            SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
-                .frame(width: w, height: h * 0.66)
-                .position(x: w / 2, y: h * 0.33)
+        let topInset: CGFloat = 52        // 上部バーの高さ分、コンテンツを下げる
+        let contentH = h - topInset
 
-            // 上部バー(戻る/コンパス/時刻/速度ボックス)
+        return ZStack(alignment: .topLeading) {
+            // 上部バー(最前面・固定)
             topBar(w: w)
+
+            // 以下、上部バーの下に配置するコンテンツ群
+            // ゲージ: 上辺全幅 + 左を垂直に
+            SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
+                .frame(width: w, height: contentH * 0.60)
+                .position(x: w / 2, y: topInset + contentH * 0.30)
 
             // 大速度表示(ゲージの左上ポケット内)
             VStack(alignment: .leading, spacing: -6) {
                 Text("\(Int(ride.speedKMH))")
-                    .font(.system(size: 84, weight: .heavy, design: .rounded))
+                    .font(.system(size: 80, weight: .heavy, design: .rounded))
                     .monospacedDigit()
                     .foregroundColor(.white)
                     .minimumScaleFactor(0.4)
@@ -51,16 +55,16 @@ struct DashboardView: View {
                     .foregroundColor(accent)
                     .padding(.leading, 4)
             }
-            .position(x: w * 0.26, y: h * 0.40)
+            .position(x: w * 0.26, y: topInset + contentH * 0.34)
 
-            // 左下: 空気圧(2輪)
+            // 左下: 空気圧(2輪)— 現状維持
             VStack(alignment: .leading, spacing: 8) {
                 tirePressureRow(.front)
                 tirePressureRow(.rear)
             }
             .position(x: w * 0.20, y: h * 0.82)
 
-            // 右側: テレメトリ(Altitude / Time / TRIP)+ バッテリー
+            // 右側: テレメトリ(上部バー下に収める)
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
@@ -71,13 +75,16 @@ struct DashboardView: View {
                     telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
                     telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
                 }
-                HStack(spacing: 12) {
-                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
-                    Color.clear.frame(maxWidth: .infinity)   // バランス用の空きセル
-                }
             }
             .frame(width: w * 0.46)
-            .position(x: w * 0.72, y: h * 0.62)
+            .position(x: w * 0.72, y: topInset + contentH * 0.30)
+
+            // バッテリー(右下)— 現状維持
+            VStack {
+                telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
+            }
+            .frame(width: w * 0.22)
+            .position(x: w * 0.60, y: h * 0.82)
         }
     }
 
@@ -89,31 +96,32 @@ struct DashboardView: View {
         return VStack(spacing: 0) {
             topBar(w: w)
 
-            // ゲージ + 速度
-            ZStack(alignment: .topLeading) {
+            Spacer(minLength: 0)   // 上の余白(中央寄せ)
+
+            // ゲージ + 速度(速度は左右中央)
+            ZStack {
                 SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
-                    .frame(height: h * 0.34)
-                VStack(alignment: .leading, spacing: -4) {
+                    .frame(height: h * 0.30)
+                VStack(spacing: -2) {
                     Text("\(Int(ride.speedKMH))")
-                        .font(.system(size: 70, weight: .heavy, design: .rounded))
+                        .font(.system(size: 72, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(.white)
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
                     Text("Km/h").font(.subheadline).foregroundColor(accent)
-                        .padding(.leading, 4)
                 }
-                .offset(x: w * 0.18, y: h * 0.10)
+                .frame(maxWidth: .infinity)   // 左右中央
             }
-            .frame(height: h * 0.34)
+            .frame(height: h * 0.30)
 
             // 空気圧
-            VStack(spacing: 8) {
+            VStack(spacing: 10) {
                 tirePressureRow(.front)
                 tirePressureRow(.rear)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 6)
+            .padding(.top, 18)
 
             // テレメトリ 2列
             VStack(spacing: 10) {
@@ -128,9 +136,9 @@ struct DashboardView: View {
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.top, 10)
+            .padding(.top, 18)
 
-            Spacer(minLength: 0)
+            Spacer(minLength: 0)   // 下の余白(中央寄せ)
         }
         .padding(.bottom, 36)
     }
