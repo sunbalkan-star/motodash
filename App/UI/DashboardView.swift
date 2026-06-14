@@ -63,27 +63,22 @@ struct DashboardView: View {
             }
             .position(x: w * 0.20, y: h * 0.82)
 
-            // 右側: テレメトリ(ゲージ上辺に被らないよう下げる)
-            VStack(spacing: 12) {
-                HStack(spacing: 12) {
-                    telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
+            // 右側テレメトリ: 左列(空き/TIME/BATTERY)+ 右列(TRIP/TOTAL/ALTITUDE)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(spacing: 12) {
+                    Color.clear.frame(maxWidth: .infinity).frame(height: 64)  // 上段を空ける
+                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
+                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
+                }
+                VStack(spacing: 12) {
                     telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
                         .onLongPressGesture { ride.resetTrip() }
-                }
-                HStack(spacing: 12) {
-                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
                     telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                    telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
                 }
             }
             .frame(width: w * 0.46)
-            .position(x: w * 0.72, y: topInset + contentH * 0.42)
-
-            // バッテリー(右下)— 現状維持
-            VStack {
-                telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
-            }
-            .frame(width: w * 0.22)
-            .position(x: w * 0.60, y: h * 0.82)
+            .position(x: w * 0.72, y: topInset + contentH * 0.54)
         }
     }
 
