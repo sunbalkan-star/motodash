@@ -13,6 +13,7 @@ final class RideManager: NSObject, ObservableObject {
     @Published var ridingSeconds: TimeInterval = 0
     @Published var gpsStatus = "GPS待機中"
     @Published var phoneBatteryPercent: Int = 0
+    @Published var headingDegrees: Double = 0     // コンパス方位(0=北)
 
     private let manager = CLLocationManager()
     private var lastLocation: CLLocation?
@@ -56,6 +57,9 @@ final class RideManager: NSObject, ObservableObject {
         manager.requestWhenInUseAuthorization()
         manager.pausesLocationUpdatesAutomatically = false
         manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
         // 走行中の画面消灯を防止(バイク用ダッシュボードの必須設定)
         UIApplication.shared.isIdleTimerDisabled = true
     }
@@ -116,6 +120,16 @@ extension RideManager: CLLocationManagerDelegate {
             default:
                 break
             }
+        }
+    }
+
+    nonisolated func locationManager(
+        _ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading
+    ) {
+        guard newHeading.headingAccuracy >= 0 else { return }
+        let deg = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        Task { @MainActor in
+            self.headingDegrees = deg
         }
     }
 

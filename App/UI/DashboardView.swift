@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// メインダッシュボード(黒背景・高コントラスト・参考モニター準拠)
-/// 横: 逆L字ゲージを左〜上に敷き、中央に速度、右に空気圧/統計。
-/// 縦: 上に速度+ゲージ、下に空気圧/統計。
+/// メインダッシュボード(黒背景・参考スマートモニター準拠)
 struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
@@ -26,109 +24,145 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 横レイアウト(メイン)
+    // MARK: - 横レイアウト
 
     private func landscapeLayout(_ geo: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
-            topBar
-            ZStack(alignment: .topLeading) {
-                // ゲージを全幅に敷く
-                SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
-                    .padding(.bottom, 44)   // 下端をバッテリー表示の上で止める
+        let w = geo.size.width
+        let h = geo.size.height
+        return ZStack(alignment: .topLeading) {
+            // ゲージ: 上辺全幅 + 左を垂直に。下端はタイヤ表示の上で止める。
+            SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
+                .frame(width: w, height: h * 0.66)
+                .position(x: w / 2, y: h * 0.33)
 
-                // 速度数字 + KM/H(KM/Hは数字の右斜め上)
-                ZStack(alignment: .topTrailing) {
-                    Text("\(Int(ride.speedKMH))")
-                        .font(.system(size: 120, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundColor(.white)
-                        .minimumScaleFactor(0.4)
-                        .lineLimit(1)
-                    Text("KM/H")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .offset(x: 54, y: 4)
-                }
-                .position(x: geo.size.width * 0.32, y: geo.size.height * 0.44)
+            // 上部バー(戻る/コンパス/時刻/速度ボックス)
+            topBar(w: w)
 
-                // 右側: 空気圧(右下)+ 統計(最下部)
-                VStack(spacing: 8) {
-                    Spacer()
-                    tirePanelCompact(.front)
-                    tirePanelCompact(.rear)
-                    statsRow
-                }
-                .frame(width: geo.size.width * 0.34, height: geo.size.height - 40)
-                .position(x: geo.size.width * 0.80, y: (geo.size.height - 40) / 2)
-
-                // 速度の真下: 電圧/高度
-                HStack(spacing: 28) {
-                    miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
-                    miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
-                }
-                .position(x: geo.size.width * 0.32, y: geo.size.height * 0.72)
+            // 大速度表示(ゲージの左上ポケット内)
+            VStack(alignment: .leading, spacing: -6) {
+                Text("\(Int(ride.speedKMH))")
+                    .font(.system(size: 84, weight: .heavy, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .minimumScaleFactor(0.4)
+                    .lineLimit(1)
+                Text("Km/h")
+                    .font(.headline)
+                    .foregroundColor(accent)
+                    .padding(.leading, 4)
             }
+            .position(x: w * 0.26, y: h * 0.40)
+
+            // 左下: 空気圧(2輪)
+            VStack(alignment: .leading, spacing: 8) {
+                tirePressureRow(.front)
+                tirePressureRow(.rear)
+            }
+            .position(x: w * 0.20, y: h * 0.82)
+
+            // 右側: テレメトリ(Altitude / Time / TRIP)+ バッテリー
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
+                    telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
+                        .onLongPressGesture { ride.resetTrip() }
+                }
+                HStack(spacing: 12) {
+                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
+                    telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                }
+                HStack(spacing: 12) {
+                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
+                    Color.clear.frame(maxWidth: .infinity)   // バランス用の空きセル
+                }
+            }
+            .frame(width: w * 0.46)
+            .position(x: w * 0.72, y: h * 0.62)
         }
     }
 
     // MARK: - 縦レイアウト
 
     private func portraitLayout(_ geo: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
-            topBar
-            ZStack(alignment: .center) {
-                SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 120, accent: accent)
-                ZStack(alignment: .topTrailing) {
+        let w = geo.size.width
+        let h = geo.size.height
+        return VStack(spacing: 0) {
+            topBar(w: w)
+
+            // ゲージ + 速度
+            ZStack(alignment: .topLeading) {
+                SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
+                    .frame(height: h * 0.34)
+                VStack(alignment: .leading, spacing: -4) {
                     Text("\(Int(ride.speedKMH))")
-                        .font(.system(size: 90, weight: .heavy, design: .rounded))
+                        .font(.system(size: 70, weight: .heavy, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(.white)
                         .minimumScaleFactor(0.4)
                         .lineLimit(1)
-                    Text("KM/H").font(.subheadline).foregroundColor(.white)
-                        .offset(x: 42, y: 2)
+                    Text("Km/h").font(.subheadline).foregroundColor(accent)
+                        .padding(.leading, 4)
                 }
-                .offset(x: 14, y: 14)
+                .offset(x: w * 0.18, y: h * 0.10)
             }
-            .frame(height: geo.size.height * 0.40)
+            .frame(height: h * 0.34)
 
-            HStack(spacing: 24) {
-                miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
-                miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
+            // 空気圧
+            VStack(spacing: 8) {
+                tirePressureRow(.front)
+                tirePressureRow(.rear)
             }
-            .padding(.vertical, 8)
+            .padding(.horizontal, 20)
+            .padding(.top, 6)
 
+            // テレメトリ 2列
             VStack(spacing: 10) {
-                tirePanelCompact(.front)
-                tirePanelCompact(.rear)
-                statsRow.padding(.top, 4)
+                HStack(spacing: 10) {
+                    telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
+                    telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
+                        .onLongPressGesture { ride.resetTrip() }
+                }
+                HStack(spacing: 10) {
+                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
+                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
+                }
             }
             .padding(.horizontal, 16)
-            .padding(.bottom, 40)   // ホームインジケーターを避ける
+            .padding(.top, 10)
+
             Spacer(minLength: 0)
         }
+        .padding(.bottom, 36)
     }
 
-    // MARK: - 上部バー(戻る/ステータス/時刻)
+    // MARK: - 上部バー
 
-    private var topBar: some View {
+    private func topBar(w: CGFloat) -> some View {
         HStack {
-            Spacer()
-            HStack(spacing: 18) {
-                Image(systemName: "wifi")
-                Text("GPS").font(.caption.bold())
-                Image(systemName: "dot.radiowaves.left.and.right")
+            // 戻る矢印(タップでホーム画面へ)
+            Button(action: goHome) {
+                Image(systemName: "chevron.left")
+                    .font(.title3)
+                    .foregroundColor(.gray)
             }
-            .foregroundColor(.gray)
+            Spacer()
+            // コンパス(緑矢印 + 方位)
+            HStack(spacing: 6) {
+                Image(systemName: "location.north.fill")
+                    .foregroundColor(accent)
+                    .rotationEffect(.degrees(ride.headingDegrees))
+                Text("\(Int(ride.headingDegrees))° \(cardinal(ride.headingDegrees))")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundColor(.white)
+            }
             Spacer()
             clockText
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 8)
         .background(Color.white.opacity(0.05))
     }
 
-    // 24時間表示・右寄せ・毎秒更新
     private var clockText: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             Text(context.date, format: .dateTime
@@ -139,54 +173,32 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 部品
+    // MARK: - 空気圧行
 
-    private var batteryIcon: String {
-        switch ride.phoneBatteryPercent {
-        case 90...:   return "battery.100"
-        case 65..<90: return "battery.75"
-        case 40..<65: return "battery.50"
-        case 15..<40: return "battery.25"
-        default:      return "battery.0"
-        }
-    }
-
-    private func miniStat(icon: String, value: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon).foregroundColor(accent)
-            Text(value).font(.title3.monospacedDigit()).bold().foregroundColor(.white)
-        }
-    }
-
-    /// 空気圧パネル(右下・やや大きめ)
-    private func tirePanelCompact(_ position: WheelPosition) -> some View {
+    private func tirePressureRow(_ position: WheelPosition) -> some View {
         let reading = tpms.readings[position]
         let assigned = tpms.assignments[position] != nil
         let live = reading.map { !$0.isStale } ?? false
 
-        return HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(position == .front ? "FRONT (BAR)" : "REAR (BAR)")
-                    .font(.system(size: 13))
-                    .foregroundColor(.gray)
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(live ? String(format: "%.2f", reading!.pressureBar) : "-.--")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundColor(pressureColor(reading, live: live))
-                    Text(live ? "\(Int(reading!.temperatureC))°C" : "--°C")
-                        .font(.system(size: 20).monospacedDigit())
-                        .foregroundColor(.white.opacity(0.75))
-                }
-            }
-            Spacer()
+        return HStack(spacing: 10) {
+            // タイヤアイコン(前後で塗り分け)
+            Image(systemName: "circle.circle")
+                .font(.system(size: 18))
+                .foregroundColor(live ? accent : .gray.opacity(0.6))
+            Text(position == .front ? "F" : "R")
+                .font(.caption2.bold())
+                .foregroundColor(.gray)
+            Text(live ? String(format: "%.2f", reading!.pressureBar) : "-.--")
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundColor(pressureColor(reading, live: live))
+            Text(live ? "\(Int(reading!.temperatureC))°C" : "--°C")
+                .font(.system(size: 15).monospacedDigit())
+                .foregroundColor(.white.opacity(0.7))
             if !assigned {
-                Text("未割当").font(.system(size: 11)).foregroundColor(.orange)
+                Text("未割当").font(.system(size: 10)).foregroundColor(.orange)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
         .onTapGesture { showSniffer = true }
     }
 
@@ -195,27 +207,50 @@ struct DashboardView: View {
         return reading.pressureBar < tpms.lowPressureThreshold ? .red : .white
     }
 
-    private var statsRow: some View {
-        HStack {
-            statItem("Total", String(format: "%.0fkm", ride.totalMeters / 1000))
-            Spacer()
-            statItem("Time", timeString(ride.ridingSeconds))
-            Spacer()
-            statItem("Trip", String(format: "%.1fkm", ride.tripMeters / 1000))
-                .onLongPressGesture { ride.resetTrip() }
+    // MARK: - テレメトリセル
+
+    private func telemetryCell(_ title: String, _ value: String, unit: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.gray)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(.system(size: 13))
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.06)))
+    }
+
+    // MARK: - ヘルパー
+
+    /// ホーム画面へ戻す(サイドロード個人アプリ向け。公開APIではない点に留意)
+    private func goHome() {
+        let selector = NSSelectorFromString("suspend")
+        if UIApplication.shared.responds(to: selector) {
+            UIApplication.shared.perform(selector)
         }
     }
 
-    private func statItem(_ title: String, _ value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(title).font(.system(size: 10)).foregroundColor(.gray)
-            Text(value).font(.subheadline.monospacedDigit()).foregroundColor(.white)
-        }
+    private func cardinal(_ deg: Double) -> String {
+        let dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        let idx = Int((deg + 22.5) / 45) % 8
+        return dirs[max(0, idx)]
     }
 
     private func timeString(_ seconds: TimeInterval) -> String {
         let h = Int(seconds) / 3600
         let m = (Int(seconds) % 3600) / 60
-        return h > 0 ? "\(h)h \(m)min" : "\(m)min"
+        return "\(h)h \(m)m"
     }
 }
