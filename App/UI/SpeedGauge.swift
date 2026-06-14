@@ -12,7 +12,7 @@ struct SpeedGauge: View {
     private let vertEndSpeed: Double = 20    // 垂直区間の上端
     private let bevelEndSpeed: Double = 40   // 斜め区間の上端=水平の開始
 
-    private let ticks: [Int] = [20, 40, 60, 80, 100, 120]
+    private let ticks: [Int] = [20, 40, 60, 80, 100]
 
     private var progress: Double { min(max(speedKMH / maxKMH, 0), 1) }
 

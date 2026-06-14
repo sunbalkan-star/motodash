@@ -61,12 +61,12 @@ struct DashboardView: View {
                 .frame(width: geo.size.width * 0.34, height: geo.size.height - 40)
                 .position(x: geo.size.width * 0.80, y: (geo.size.height - 40) / 2)
 
-                // 左下: 電圧/高度
+                // 速度の真下: 電圧/高度
                 HStack(spacing: 28) {
                     miniStat(icon: batteryIcon, value: "\(ride.phoneBatteryPercent)%")
                     miniStat(icon: "mountain.2.fill", value: "\(Int(ride.altitudeM))m")
                 }
-                .position(x: geo.size.width * 0.16, y: geo.size.height - 20)
+                .position(x: geo.size.width * 0.32, y: geo.size.height * 0.72)
             }
         }
     }
@@ -113,8 +113,6 @@ struct DashboardView: View {
 
     private var topBar: some View {
         HStack {
-            Image(systemName: "chevron.left")
-                .foregroundColor(.gray)
             Spacer()
             HStack(spacing: 18) {
                 Image(systemName: "wifi")
@@ -169,28 +167,25 @@ struct DashboardView: View {
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(position == .front ? "FRONT (BAR)" : "REAR (BAR)")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundColor(.gray)
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text(live ? String(format: "%.2f", reading!.pressureBar) : "-.--")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundColor(pressureColor(reading, live: live))
                     Text(live ? "\(Int(reading!.temperatureC))°C" : "--°C")
-                        .font(.system(size: 18).monospacedDigit())
+                        .font(.system(size: 20).monospacedDigit())
                         .foregroundColor(.white.opacity(0.75))
                 }
             }
             Spacer()
-            Image(systemName: "bicycle")
-                .font(.system(size: 24))
-                .foregroundColor(live ? accent : .gray.opacity(0.5))
             if !assigned {
-                Text("未割当").font(.system(size: 10)).foregroundColor(.orange)
+                Text("未割当").font(.system(size: 11)).foregroundColor(.orange)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 14)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
         .onTapGesture { showSniffer = true }
     }
