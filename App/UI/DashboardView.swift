@@ -36,13 +36,12 @@ struct DashboardView: View {
             // 上部バー(最前面・固定)
             topBar(w: w)
 
-            // 以下、上部バーの下に配置するコンテンツ群
-            // ゲージ: 上辺全幅 + 左を垂直に
+            // ゲージ: 上辺全幅 + 左を垂直に(縦部分を伸ばすため高さ拡大)
             SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
-                .frame(width: w, height: contentH * 0.60)
-                .position(x: w / 2, y: topInset + contentH * 0.30)
+                .frame(width: w, height: contentH * 0.74)
+                .position(x: w / 2, y: topInset + contentH * 0.37)
 
-            // 大速度表示(ゲージの左上ポケット内)
+            // 大速度表示(ゲージの縦部分寄りに左へ詰める)
             VStack(alignment: .leading, spacing: -6) {
                 Text("\(Int(ride.speedKMH))")
                     .font(.system(size: 80, weight: .heavy, design: .rounded))
@@ -55,7 +54,7 @@ struct DashboardView: View {
                     .foregroundColor(accent)
                     .padding(.leading, 4)
             }
-            .position(x: w * 0.26, y: topInset + contentH * 0.34)
+            .position(x: w * 0.20, y: topInset + contentH * 0.40)
 
             // 左下: 空気圧(2輪)— 現状維持
             VStack(alignment: .leading, spacing: 8) {
@@ -64,7 +63,7 @@ struct DashboardView: View {
             }
             .position(x: w * 0.20, y: h * 0.82)
 
-            // 右側: テレメトリ(上部バー下に収める)
+            // 右側: テレメトリ(ゲージ上辺に被らないよう下げる)
             VStack(spacing: 12) {
                 HStack(spacing: 12) {
                     telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
@@ -77,7 +76,7 @@ struct DashboardView: View {
                 }
             }
             .frame(width: w * 0.46)
-            .position(x: w * 0.72, y: topInset + contentH * 0.30)
+            .position(x: w * 0.72, y: topInset + contentH * 0.42)
 
             // バッテリー(右下)— 現状維持
             VStack {
