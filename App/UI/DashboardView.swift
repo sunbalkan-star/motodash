@@ -34,22 +34,25 @@ struct DashboardView: View {
         let gaugeH = contentH * 0.74
         // SpeedGauge側と同じ式: lineWidth = min(w, gaugeH) * 0.20
         let lineWidth = min(w, gaugeH) * 0.20
-        // 50km/h相当の水平x位置(40〜60ラベルの中間)— 大速度を干渉しない位置へ
+        // 大速度の配置: 横=40〜80ラベルの中間(60km/h tick位置), 縦=20km/hラベルと同じ高さ
         let half = lineWidth / 2
         let r = lineWidth * 1.1
         let hStartX = half + r
         let hEndX = w - half
-        let tick50X = hStartX + (hEndX - hStartX) * (50.0 - 40.0) / (160.0 - 40.0)
+        let vBottomY = gaugeH - half
+        let arcStartY = half + r
+        let bigSpeedX = hStartX + (hEndX - hStartX) * (60.0 - 40.0) / (160.0 - 40.0)
+        let bigSpeedY = vBottomY - (vBottomY - arcStartY) * (20.0 / 40.0)
 
         return ZStack(alignment: .topLeading) {
             topBar(w: w)
 
-            // ゲージ + 大速度数字(水平バーの下、~50km/h位置に配置)
+            // ゲージ + 大速度数字(60km/h位置・20km/h高さ)
             SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
                 .frame(width: w, height: gaugeH)
                 .overlay {
                     bigSpeed(size: 88)
-                        .position(x: tick50X, y: lineWidth + 56)
+                        .position(x: bigSpeedX, y: bigSpeedY)
                 }
                 .position(x: w / 2, y: topInset + gaugeH / 2)
 
@@ -93,12 +96,12 @@ struct DashboardView: View {
             topBar(w: w)
             Spacer(minLength: 0)
 
-            // ゲージ + 大速度(左右中央、水平バーの下に配置)
+            // ゲージ + 大速度(左右中央、縦バーの下端と下揃え)
             SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
                 .frame(height: gaugeH)
-                .overlay {
+                .overlay(alignment: .bottom) {
                     bigSpeed(size: 64)
-                        .position(x: w / 2, y: lineWidth + 50)
+                        .padding(.bottom, lineWidth / 2)
                 }
 
             // 空気圧
