@@ -34,17 +34,22 @@ struct DashboardView: View {
         let gaugeH = contentH * 0.74
         // SpeedGauge側と同じ式: lineWidth = min(w, gaugeH) * 0.20
         let lineWidth = min(w, gaugeH) * 0.20
+        // 50km/h相当の水平x位置(40〜60ラベルの中間)— 大速度を干渉しない位置へ
+        let half = lineWidth / 2
+        let r = lineWidth * 1.1
+        let hStartX = half + r
+        let hEndX = w - half
+        let tick50X = hStartX + (hEndX - hStartX) * (50.0 - 40.0) / (160.0 - 40.0)
 
         return ZStack(alignment: .topLeading) {
             topBar(w: w)
 
-            // ゲージ + 大速度数字(L字の内側角に密着)
+            // ゲージ + 大速度数字(水平バーの下、~50km/h位置に配置)
             SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
                 .frame(width: w, height: gaugeH)
-                .overlay(alignment: .topLeading) {
+                .overlay {
                     bigSpeed(size: 88)
-                        .padding(.leading, lineWidth + 6)
-                        .padding(.top, lineWidth + 2)
+                        .position(x: tick50X, y: lineWidth + 56)
                 }
                 .position(x: w / 2, y: topInset + gaugeH / 2)
 
@@ -55,22 +60,24 @@ struct DashboardView: View {
             }
             .position(x: w * 0.20, y: h * 0.82)
 
-            // 右側テレメトリ: 左列(空き/TIME/BATTERY)+ 右列(TRIP/TOTAL/ALTITUDE)
-            HStack(alignment: .top, spacing: 12) {
-                VStack(spacing: 12) {
-                    Color.clear.frame(maxWidth: .infinity).frame(height: 64)
-                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
+            // 右側テレメトリ 2行×3列:
+            //   上段(右詰め): [空き] [BATTERY] [ALTITUDE]
+            //   下段:         [TRIP] [TIME]    [TOTAL]
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    telemetryCell("", "0", unit: "").hidden()   // レイアウト確保用の空セル
                     telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
-                }
-                VStack(spacing: 12) {
-                    telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
-                        .onLongPressGesture { ride.resetTrip() }
-                    telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
                     telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
                 }
+                HStack(spacing: 12) {
+                    telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
+                        .onLongPressGesture { ride.resetTrip() }
+                    telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
+                    telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                }
             }
-            .frame(width: w * 0.46)
-            .position(x: w * 0.72, y: topInset + contentH * 0.54)
+            .frame(width: w * 0.56)
+            .position(x: w * 0.68, y: topInset + contentH * 0.62)
         }
     }
 
@@ -86,13 +93,12 @@ struct DashboardView: View {
             topBar(w: w)
             Spacer(minLength: 0)
 
-            // ゲージ + 大速度(L字の内側角に密着)
+            // ゲージ + 大速度(左右中央、水平バーの下に配置)
             SpeedGauge(speedKMH: ride.speedKMH, maxKMH: 160, accent: accent)
                 .frame(height: gaugeH)
-                .overlay(alignment: .topLeading) {
+                .overlay {
                     bigSpeed(size: 64)
-                        .padding(.leading, lineWidth + 6)
-                        .padding(.top, lineWidth + 2)
+                        .position(x: w / 2, y: lineWidth + 50)
                 }
 
             // 空気圧
@@ -103,16 +109,20 @@ struct DashboardView: View {
             .padding(.horizontal, 20)
             .padding(.top, 18)
 
-            // テレメトリ 2列
-            VStack(spacing: 10) {
-                HStack(spacing: 10) {
+            // テレメトリ 3行×2列:
+            //   左列(下詰め): [空き] / BATTERY / ALTITUDE
+            //   右列:         TRIP / TIME / TOTAL
+            HStack(alignment: .top, spacing: 10) {
+                VStack(spacing: 10) {
+                    telemetryCell("", "0", unit: "").hidden()
+                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
                     telemetryCell("ALTITUDE", "\(Int(ride.altitudeM))", unit: "m")
+                }
+                VStack(spacing: 10) {
                     telemetryCell("TRIP", String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
                         .onLongPressGesture { ride.resetTrip() }
-                }
-                HStack(spacing: 10) {
                     telemetryCell("TIME", timeString(ride.ridingSeconds), unit: "")
-                    telemetryCell("BATTERY", "\(ride.phoneBatteryPercent)", unit: "%")
+                    telemetryCell("TOTAL", String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
                 }
             }
             .padding(.horizontal, 16)
@@ -142,18 +152,19 @@ struct DashboardView: View {
     // MARK: - 上部バー
 
     private func topBar(w: CGFloat) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // 戻る矢印(タップでホーム画面へ)
             Button(action: goHome) {
                 Image(systemName: "chevron.left")
                     .font(.title3)
                     .foregroundColor(.gray)
             }
+            .fixedSize()
 
             // 左小窓: 現在速度
             miniSpeedBox(value: Int(ride.speedKMH), unit: "Km/h", emphasized: false)
 
-            Spacer()
+            Spacer(minLength: 4)
 
             // コンパス(緑矢印 + 方位)
             HStack(spacing: 6) {
@@ -163,16 +174,18 @@ struct DashboardView: View {
                 Text("\(Int(ride.headingDegrees))° \(cardinal(ride.headingDegrees))")
                     .font(.subheadline.monospacedDigit())
                     .foregroundColor(.white)
+                    .lineLimit(1)
             }
+            .fixedSize(horizontal: true, vertical: false)
 
-            Spacer()
+            Spacer(minLength: 4)
 
             // 右小窓: 最高速
             miniSpeedBox(value: Int(ride.maxSpeedKMH), unit: "KM/H", emphasized: true)
 
-            clockText
+            clockText.fixedSize()
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(Color.white.opacity(0.05))
     }
@@ -183,10 +196,13 @@ struct DashboardView: View {
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundColor(.white)
+                .lineLimit(1)
             Text(unit)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.gray)
+                .lineLimit(1)
         }
+        .fixedSize(horizontal: true, vertical: false)
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(
