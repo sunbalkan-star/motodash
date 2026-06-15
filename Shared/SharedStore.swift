@@ -5,7 +5,7 @@ import Foundation
 /// (ウィジェットのリロードは呼び出し側 RideManager がスロットリング付きで行う)
 enum SharedStore {
     /// project.yml の application-groups と一致させること
-    static let appGroupID = "group.com.tadashi.myapp"
+    static let appGroupID = "group.com.tadashi.motodash"
 
     private static let tripKey = "ride.tripMeters"
     private static let totalKey = "ride.totalMeters"

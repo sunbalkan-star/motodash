@@ -1,4 +1,4 @@
-name: MyApp
+name: MotoDash
 options:
   bundleIdPrefix: com.tadashi
   deploymentTarget:
@@ -14,24 +14,24 @@ settings:
     GENERATE_INFOPLIST_FILE: NO
 
 targets:
-  MyApp:
+  MotoDash:
     type: application
     platform: iOS
     sources:
       - App
       - Shared
     dependencies:
-      - target: MyWidgetExtension
+      - target: MotoDashWidgetExtension
         embed: true
     entitlements:
       path: App/App.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.tadashi.myapp
+          - group.com.tadashi.motodash
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: MyApp
+        CFBundleDisplayName: MotoDash
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -45,7 +45,7 @@ targets:
         NSLocationWhenInUseUsageDescription: "速度・高度・走行距離の計測に位置情報を使用します。"
         NSBluetoothAlwaysUsageDescription: "TPMSタイヤ空気圧センサーの受信に使用します。"
 
-  MyWidgetExtension:
+  MotoDashWidgetExtension:
     type: app-extension
     platform: iOS
     sources:
@@ -55,15 +55,15 @@ targets:
       path: Widget/Widget.entitlements
       properties:
         com.apple.security.application-groups:
-          - group.com.tadashi.myapp
+          - group.com.tadashi.motodash
     info:
       path: Widget/Info.plist
       properties:
-        CFBundleDisplayName: MyWidget
+        CFBundleDisplayName: MotoDashWidget
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tadashi.MyApp.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.tadashi.MotoDash.widget

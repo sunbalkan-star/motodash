@@ -13,7 +13,7 @@ on:
   workflow_dispatch:   # Actionsタブから手動実行も可能
 
 env:
-  SCHEME: MyApp
+  SCHEME: MotoDash
   CONFIGURATION: Release
 
 jobs:
@@ -41,7 +41,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild \
-            -project MyApp.xcodeproj \
+            -project MotoDash.xcodeproj \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
             -destination 'generic/platform=iOS' \

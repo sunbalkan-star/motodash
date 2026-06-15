@@ -2,7 +2,7 @@ import SwiftUI
 import UserNotifications
 
 @main
-struct MyTemplateApp: App {
+struct MotoDashApp: App {
     @StateObject private var ride = RideManager()
     @StateObject private var tpms = TPMSManager()
 
