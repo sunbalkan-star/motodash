@@ -7,6 +7,7 @@ import WidgetKit
 @MainActor
 final class RideManager: NSObject, ObservableObject {
     @Published var speedKMH: Double = 0
+    @Published var maxSpeedKMH: Double = 0        // 走行開始からの最高速(リセットでクリア)
     @Published var altitudeM: Double = 0
     @Published var tripMeters: Double = 0
     @Published var totalMeters: Double = 0
@@ -67,6 +68,7 @@ final class RideManager: NSObject, ObservableObject {
     func resetTrip() {
         tripMeters = 0
         ridingSeconds = 0
+        maxSpeedKMH = 0
         persist(force: true)
     }
 
@@ -146,6 +148,7 @@ extension RideManager: CLLocationManagerDelegate {
         let rawKMH = max(0, location.speed) * 3.6
         smoothedSpeed = smoothedSpeed * 0.3 + rawKMH * 0.7
         speedKMH = smoothedSpeed < 1 ? 0 : smoothedSpeed
+        if speedKMH > maxSpeedKMH { maxSpeedKMH = speedKMH }
 
         let now = Date()
         if let last = lastLocation, let lastDate = lastUpdateDate {

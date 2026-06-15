@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 参考スマートモニター準拠の速度ゲージ。
 /// 形状: 左を垂直に立ち上がり → 円弧で滑らかに曲がり → 上辺を右端まで水平。
-/// 最大160km/h。現在速度まで緑の塗りが伸び、目盛り刻み(セグメント)を重ねる。
+/// 最大160km/h。現在速度まで緑の塗りが伸び、目盛り刻みを重ねる。
 struct SpeedGauge: View {
     let speedKMH: Double
     let maxKMH: Double           // 160
@@ -11,10 +11,10 @@ struct SpeedGauge: View {
     /// 垂直区間が担当する速度(角=この速度)。画像では垂直に20,40があるので40。
     private let cornerSpeed: Double = 40
 
-    /// ラベルを振る速度
-    private let labels: [Int] = [20, 40, 80, 120, 160]
-    /// 刻み(20刻み)
-    private let tickValues: [Int] = [20, 40, 60, 80, 100, 120, 140, 160]
+    /// ラベルを振る速度(大刻み)
+    private let majorTicks: [Int] = [20, 40, 80, 120, 160]
+    /// 小刻み(10km/h刻み、majorと重複しない値)
+    private let minorTicks: [Int] = [10, 30, 50, 60, 70, 90, 100, 110, 130, 140, 150]
 
     private var progress: Double { min(max(speedKMH / maxKMH, 0), 1) }
 
@@ -38,27 +38,44 @@ struct SpeedGauge: View {
                             style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt, lineJoin: .round))
                     .animation(.easeOut(duration: 0.3), value: progress)
 
-                // 目盛り刻み(セグメント): ゲージに対して垂直な短い線
-                ForEach(tickValues, id: \.self) { v in
-                    let (pt, isVertical) = g.tickPlacement(forSpeed: Double(v))
-                    Rectangle()
-                        .fill(Color.black.opacity(0.35))
-                        .frame(width: isVertical ? lineWidth * 0.85 : 2,
-                               height: isVertical ? 2 : lineWidth * 0.85)
-                        .position(pt)
+                // 小刻み(細い・薄い)
+                ForEach(minorTicks, id: \.self) { v in
+                    tickShape(g: g, speed: Double(v),
+                              thickness: 1.5,
+                              lengthRatio: 0.72,
+                              color: .black.opacity(0.30))
+                }
+                // 大刻み(太い・濃い)
+                ForEach(majorTicks, id: \.self) { v in
+                    tickShape(g: g, speed: Double(v),
+                              thickness: 3,
+                              lengthRatio: 0.92,
+                              color: .black.opacity(0.55))
                 }
 
-                // ラベル
-                ForEach(labels, id: \.self) { v in
+                // ラベル(L字の内側=hollow側に外出し)
+                ForEach(majorTicks, id: \.self) { v in
                     let pt = g.labelPlacement(forSpeed: Double(v))
                     Text("\(v)")
-                        .font(.system(size: lineWidth * 0.34, weight: .bold, design: .rounded))
+                        .font(.system(size: lineWidth * 0.42, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundColor(Double(v) <= speedKMH ? .black.opacity(0.7) : .gray)
+                        .foregroundColor(Double(v) <= speedKMH ? .white : .gray.opacity(0.85))
                         .position(pt)
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func tickShape(g: Geo, speed: Double, thickness: CGFloat,
+                           lengthRatio: CGFloat, color: Color) -> some View {
+        let (pt, isVertical) = g.tickPlacement(forSpeed: speed)
+        let long = g.lineWidth * lengthRatio
+        Rectangle()
+            .fill(color)
+            .frame(width: isVertical ? long : thickness,
+                   height: isVertical ? thickness : long)
+            .position(pt)
     }
 }
 
@@ -137,17 +154,17 @@ private struct Geo {
         }
     }
 
-    /// ラベル座標(刻みより内側に少しオフセット)
+    /// ラベル座標(L字の内側=hollow側へバーの外に外出し)
     func labelPlacement(forSpeed s: Double) -> CGPoint {
-        let inset = lineWidth * 0.62
+        let gap = lineWidth * 0.55   // バーから離す量(数字がバーに乗らないように)
         if s <= cornerSpeed {
             let t = s / cornerSpeed
             let y = vBottom.y - (vBottom.y - arcStart.y) * CGFloat(t)
-            return CGPoint(x: half + inset, y: y)   // 垂直 → 右側内側へ
+            return CGPoint(x: lineWidth + gap, y: y)   // 垂直 → 右側(hollow)
         } else {
             let t = (s - cornerSpeed) / (maxKMH - cornerSpeed)
             let x = hStart.x + (hEnd.x - hStart.x) * CGFloat(t)
-            return CGPoint(x: x, y: half + inset)   // 水平 → 下側内側へ
+            return CGPoint(x: x, y: lineWidth + gap)   // 水平 → 下側(hollow)
         }
     }
 }
