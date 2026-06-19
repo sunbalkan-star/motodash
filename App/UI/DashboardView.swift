@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// MotoDash ダッシュボード(デザインハンドオフ hifi 準拠)。
+/// MotoDash ダッシュボード(デザインハンドオフ hifi v2 準拠)。
 /// 横画面=主画面(ハンドルマウント) / 縦画面=従画面。
 /// 表示データは RideManager(GPS/高度/方位/電池) と TPMSManager(空気圧)から。
 struct DashboardView: View {
@@ -27,19 +27,19 @@ struct DashboardView: View {
 
     private var landscapeLayout: some View {
         VStack(spacing: 0) {
-            statusBar(time: timeTrailing(isPortrait: false), compassSize: 20, timeSize: 24)
+            statusBar(time: dateTimeString(), compassSize: 20, timeSize: 24)
                 .padding(EdgeInsets(top: 11, leading: 46, bottom: 6, trailing: 18))
 
             GaugeBar(speedKMH: ride.speedKMH, maxSpeedKMH: ride.maxSpeedKMH,
-                     barHeight: 60, minorTickHeight: 26, labelSize: 15, showMaxPill: true,
+                     barHeight: 30, cornerRadius: 8, labelSize: 15, showMaxPill: true,
                      onResetMax: { ride.resetMaxSpeed() })
                 .padding(.top, 2)
                 .padding(.leading, 46)
                 .padding(.trailing, 18)
 
             VStack(spacing: 0) {
+                // ヒーロー速度(右揃え・下揃え) + TPMS 2枚(下揃え)
                 HStack(alignment: .bottom, spacing: 26) {
-                    // ヒーロー速度(右揃え・下揃え)
                     HStack(alignment: .bottom, spacing: 12) {
                         Text("\(Int(ride.speedKMH.rounded()))")
                             .font(motoNumberFont(132, .heavy))
@@ -54,7 +54,6 @@ struct DashboardView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
-                    // TPMS(下揃え・固定幅198)
                     HStack(spacing: 12) {
                         tpmsCard("FRONT", bar: frontBar, valueSize: 46).frame(width: 198)
                         tpmsCard("REAR", bar: rearBar, valueSize: 46).frame(width: 198)
@@ -62,22 +61,28 @@ struct DashboardView: View {
                 }
                 .frame(maxHeight: .infinity, alignment: .bottom)
 
-                // 下辺ストリップ: BATTERY, ALTITUDE, TIME, TRIP, TOTAL
+                // 下辺ストリップ(背高95・内容上下中央・値中央): BATTERY, ALTITUDE, TIME, TRIP, TOTAL
                 HStack(spacing: 9) {
                     dataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
                              valueColor: StateColor.battery(ride.phoneBatteryPercent),
-                             valueSize: 26, labelSize: 11, corner: 12)
+                             valueSize: 30, labelSize: 11, corner: 12, centered: true)
+                        .frame(maxHeight: .infinity)
                     dataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m",
-                             valueSize: 26, labelSize: 11, corner: 12)
+                             valueSize: 30, labelSize: 11, corner: 12, centered: true)
+                        .frame(maxHeight: .infinity)
                     dataCard("TIME", value: durationString(ride.ridingSeconds), unit: "",
-                             valueSize: 26, labelSize: 11, corner: 12)
+                             valueSize: 30, labelSize: 11, corner: 12, centered: true)
+                        .frame(maxHeight: .infinity)
                     dataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km",
-                             valueSize: 26, labelSize: 11, corner: 12)
+                             valueSize: 30, labelSize: 11, corner: 12, centered: true)
+                        .frame(maxHeight: .infinity)
                         .onLongPressGesture { ride.resetTrip() }
                     dataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km",
-                             valueSize: 26, labelSize: 11, corner: 12)
+                             valueSize: 30, labelSize: 11, corner: 12, centered: true)
+                        .frame(maxHeight: .infinity)
                 }
-                .padding(.top, 12)
+                .frame(height: 95)
+                .padding(.top, 10)
                 .padding(.bottom, 7)
             }
             .frame(maxHeight: .infinity)
@@ -91,11 +96,11 @@ struct DashboardView: View {
 
     private var portraitLayout: some View {
         VStack(spacing: 0) {
-            statusBar(time: timeTrailing(isPortrait: true), compassSize: 17, timeSize: 19)
+            statusBar(time: clockString(), compassSize: 17, timeSize: 19)
                 .padding(EdgeInsets(top: 16, leading: 18, bottom: 8, trailing: 18))
 
             GaugeBar(speedKMH: ride.speedKMH, maxSpeedKMH: ride.maxSpeedKMH,
-                     barHeight: 56, minorTickHeight: 24, labelSize: 13, showMaxPill: false)
+                     barHeight: 28, cornerRadius: 7, labelSize: 13, showMaxPill: false)
                 .padding(.top, 6)
                 .padding(.horizontal, 20)
 
@@ -114,7 +119,7 @@ struct DashboardView: View {
             .padding(.top, 18)
             .padding(.bottom, 8)
 
-            // TPMS(等幅横並び)
+            // TPMS(等幅横並び・値中央)
             HStack(spacing: 11) {
                 tpmsCard("FRONT", bar: frontBar, valueSize: 42)
                 tpmsCard("REAR", bar: rearBar, valueSize: 42)
@@ -122,25 +127,25 @@ struct DashboardView: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
 
-            // データカード 2列グリッド(TOTALは2列ぶち抜き)
+            // データカード 2列グリッド(TOTALは2列ぶち抜き・左揃え)
             Grid(horizontalSpacing: 11, verticalSpacing: 11) {
                 GridRow {
                     dataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km",
-                             valueSize: 32, labelSize: 12, corner: 14)
+                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
                         .onLongPressGesture { ride.resetTrip() }
                     dataCard("TIME", value: durationString(ride.ridingSeconds), unit: "",
-                             valueSize: 32, labelSize: 12, corner: 14)
+                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
                 }
                 GridRow {
                     dataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m",
-                             valueSize: 32, labelSize: 12, corner: 14)
+                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
                     dataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
                              valueColor: StateColor.battery(ride.phoneBatteryPercent),
-                             valueSize: 32, labelSize: 12, corner: 14)
+                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
                 }
                 GridRow {
                     dataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km",
-                             valueSize: 32, labelSize: 12, corner: 14)
+                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
                         .gridCellColumns(2)
                 }
             }
@@ -201,7 +206,7 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - TPMSカード
+    // MARK: - TPMSカード(値は中央揃え)
 
     private func tpmsCard(_ title: String, bar: Double?, valueSize: CGFloat) -> some View {
         let valueText = bar.map { String(format: "%.1f", $0) } ?? "-.--"
@@ -228,6 +233,7 @@ struct DashboardView: View {
                     .font(.system(size: 14))
                     .foregroundColor(Palette.textMid)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .padding(EdgeInsets(top: 11, leading: 16, bottom: 13, trailing: 16))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,31 +244,40 @@ struct DashboardView: View {
 
     // MARK: - データカード
 
+    /// centered=true(横ストリップ): 値を中央揃え＋上下中央(呼び出し側で .frame(maxHeight:.infinity))
+    /// centered=false(縦グリッド): 左揃え・自然高
     private func dataCard(_ label: String, value: String, unit: String,
                           valueColor: Color = Palette.textHi,
-                          valueSize: CGFloat, labelSize: CGFloat, corner: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+                          valueSize: CGFloat, labelSize: CGFloat, corner: CGFloat,
+                          centered: Bool) -> some View {
+        let valueRow = HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(value)
+                .font(motoNumberFont(valueSize, .bold))
+                .foregroundColor(valueColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            if !unit.isEmpty {
+                Text(unit)
+                    .font(.system(size: labelSize + 1))
+                    .foregroundColor(Palette.textMid)
+            }
+        }
+
+        return VStack(alignment: .leading, spacing: 3) {
+            if centered { Spacer(minLength: 0) }
             Text(label)
                 .font(motoLabelFont(labelSize))
                 .tracking(1.5)
                 .foregroundColor(Palette.label)
                 .lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value)
-                    .font(motoNumberFont(valueSize, .bold))
-                    .foregroundColor(valueColor)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                if !unit.isEmpty {
-                    Text(unit)
-                        .font(.system(size: labelSize + 1))
-                        .foregroundColor(Palette.textMid)
-                }
-            }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            valueRow
+                .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+            if centered { Spacer(minLength: 0) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 13)
-        .padding(.vertical, 8)
+        .padding(.vertical, centered ? 6 : 8)
         .overlay(RoundedRectangle(cornerRadius: corner).stroke(Palette.borderWeak, lineWidth: 1.5))
     }
 
@@ -284,7 +299,7 @@ struct DashboardView: View {
 
     private func cardinal(_ deg: Double) -> String {
         let dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
-        let idx = Int((deg / 45).rounded()) % 8
+        let idx = Int((deg / 45).rounded())
         return dirs[(idx % 8 + 8) % 8]
     }
 
@@ -294,16 +309,17 @@ struct DashboardView: View {
         return "\(h)h \(m)m"
     }
 
-    /// 右端の日時(横=YYYY/M/D H:mm) / 時刻(縦=HH:MM)。分単位更新で十分なので呼び出しごとに現在時刻。
-    private func timeTrailing(isPortrait: Bool) -> String {
-        let now = Date()
-        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: now)
-        if isPortrait {
-            return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
-        } else {
-            let mm = String(format: "%02d", c.minute ?? 0)
-            return "\(c.year ?? 0)/\(c.month ?? 0)/\(c.day ?? 0) \(c.hour ?? 0):\(mm)"
-        }
+    /// 横画面の日時: YYYY-M-D H:mm(分のみゼロ埋め)
+    private func dateTimeString() -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: Date())
+        let mm = String(format: "%02d", c.minute ?? 0)
+        return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0) \(c.hour ?? 0):\(mm)"
+    }
+
+    /// 縦画面の時刻: HH:MM
+    private func clockString() -> String {
+        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
 
     /// ホーム画面へ戻す(サイドロード個人アプリ向け。公開APIではない点に留意)
