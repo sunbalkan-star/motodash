@@ -72,6 +72,11 @@ final class RideManager: NSObject, ObservableObject {
         persist(force: true)
     }
 
+    /// 最高速のみリセット(ゲージのMAX表示を長押し)。次のGPS更新から再追従。
+    func resetMaxSpeed() {
+        maxSpeedKMH = 0
+    }
+
     private func refreshBattery() {
         let device = UIDevice.current
         // 充電完了(.full)時は batteryLevel が 1.0 未満を返すことがあるため補正

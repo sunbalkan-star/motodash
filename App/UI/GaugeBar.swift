@@ -14,6 +14,8 @@ struct GaugeBar: View {
     var minorTickHeight: CGFloat  // 横26 / 縦24
     var labelSize: CGFloat        // 横15 / 縦13
     var showMaxPill: Bool         // 横のみ
+    /// MAXピル長押しで最高速をリセット
+    var onResetMax: (() -> Void)? = nil
 
     private let labels: [(text: String, pct: CGFloat)] = [
         ("20", 0.125), ("40", 0.25), ("80", 0.5), ("120", 0.75), ("160", 1.0)
@@ -78,6 +80,8 @@ struct GaugeBar: View {
         .padding(.vertical, 3)
         .background(RoundedRectangle(cornerRadius: 8).fill(Palette.track))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Palette.lime, lineWidth: 1.5))
+        .contentShape(Rectangle())
+        .onLongPressGesture { onResetMax?() }
     }
 
     private var labelRow: some View {

@@ -31,7 +31,8 @@ struct DashboardView: View {
                 .padding(EdgeInsets(top: 11, leading: 46, bottom: 6, trailing: 18))
 
             GaugeBar(speedKMH: ride.speedKMH, maxSpeedKMH: ride.maxSpeedKMH,
-                     barHeight: 60, minorTickHeight: 26, labelSize: 15, showMaxPill: true)
+                     barHeight: 60, minorTickHeight: 26, labelSize: 15, showMaxPill: true,
+                     onResetMax: { ride.resetMaxSpeed() })
                 .padding(.top, 2)
                 .padding(.leading, 46)
                 .padding(.trailing, 18)
