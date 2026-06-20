@@ -38,7 +38,7 @@ struct DashboardView: View {
                 .padding(.trailing, 18)
 
             VStack(spacing: 0) {
-                // ヒーロー速度(右揃え) + TPMS 2枚: 上詰め、速度数字は内部で下揃え
+                // ヒーロー速度(右揃え・下揃え) + TPMS 2枚(下揃え)
                 HStack(alignment: .bottom, spacing: 26) {
                     HStack(alignment: .bottom, spacing: 12) {
                         Text("\(Int(ride.speedKMH.rounded()))")
@@ -59,9 +59,7 @@ struct DashboardView: View {
                         tpmsCard("REAR", bar: rearBar, valueSize: 46).frame(width: 198)
                     }
                 }
-                .padding(.top, 6)
-
-                Spacer(minLength: 0)
+                .frame(maxHeight: .infinity, alignment: .bottom)
 
                 // 下辺ストリップ(高さ80・内容上下中央・値中央): BATTERY, ALTITUDE, TIME, TRIP, TOTAL
                 HStack(spacing: 9) {
@@ -85,7 +83,7 @@ struct DashboardView: View {
                 }
                 .frame(height: 80)
                 .padding(.top, 4)
-                .padding(.bottom, 20)
+                .padding(.bottom, 10)
             }
             .frame(maxHeight: .infinity)
             .padding(.leading, 46)
