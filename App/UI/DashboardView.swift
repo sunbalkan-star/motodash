@@ -120,23 +120,28 @@ struct DashboardView: View {
             .padding(.top, 18)
             .padding(.bottom, 8)
 
-            // 2列カードエリア: 左=FRONT/REAR/BATTERY/ALTITUDE / 右=TIME/TRIP/TOTAL(下揃え)
-            HStack(alignment: .bottom, spacing: 9) {
-                // 左列(4枚)
-                VStack(spacing: 9) {
+            // カードエリア: FRONT/REAR横並び + 下2列(左=BATTERY/ALTITUDE, 右=TIME/TRIP/TOTAL下揃え)
+            VStack(spacing: 9) {
+                // 上段: FRONT | REAR 横並び
+                HStack(spacing: 9) {
                     pTPMSCard("FRONT", bar: frontBar, assigned: tpms.assignments[.front] != nil)
                     pTPMSCard("REAR",  bar: rearBar,  assigned: tpms.assignments[.rear]  != nil)
-                    pDataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
-                               valueColor: StateColor.battery(ride.phoneBatteryPercent))
-                    pDataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m")
                 }
-                // 右列(3枚・上は空欄=下揃え)
-                VStack(spacing: 9) {
-                    Spacer(minLength: 0)
-                    pDataCard("TIME", value: durationString(ride.ridingSeconds), unit: "")
-                    pDataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
-                        .onLongPressGesture { ride.resetTrip() }
-                    pDataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                // 下段2列: 左2枚 / 右3枚(下揃え)
+                HStack(alignment: .bottom, spacing: 9) {
+                    // 左列(2枚)
+                    VStack(spacing: 9) {
+                        pDataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
+                                   valueColor: StateColor.battery(ride.phoneBatteryPercent))
+                        pDataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m")
+                    }
+                    // 右列(3枚・下揃え: 左より79pt長いため自動的に上が空く)
+                    VStack(spacing: 9) {
+                        pDataCard("TIME", value: durationString(ride.ridingSeconds), unit: "")
+                        pDataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
+                            .onLongPressGesture { ride.resetTrip() }
+                        pDataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                    }
                 }
             }
             .padding(.horizontal, 20)
