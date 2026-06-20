@@ -84,7 +84,7 @@ struct DashboardView: View {
                         .frame(maxHeight: .infinity)
                 }
                 .frame(height: 80)
-                .padding(.top, 16)
+                .padding(.top, 28)
                 .padding(.bottom, 10)
             }
             .frame(maxHeight: .infinity)
