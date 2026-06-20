@@ -116,41 +116,32 @@ struct DashboardView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(Palette.lime)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
             .padding(.top, 18)
             .padding(.bottom, 8)
 
-            // TPMS(等幅横並び・値中央)
-            HStack(spacing: 11) {
-                tpmsCard("FRONT", bar: frontBar, valueSize: 42)
-                tpmsCard("REAR", bar: rearBar, valueSize: 42)
+            // 2列カードエリア: 左=FRONT/REAR/BATTERY/ALTITUDE / 右=TIME/TRIP/TOTAL(下揃え)
+            HStack(alignment: .bottom, spacing: 9) {
+                // 左列(4枚)
+                VStack(spacing: 9) {
+                    pTPMSCard("FRONT", bar: frontBar, assigned: tpms.assignments[.front] != nil)
+                    pTPMSCard("REAR",  bar: rearBar,  assigned: tpms.assignments[.rear]  != nil)
+                    pDataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
+                               valueColor: StateColor.battery(ride.phoneBatteryPercent))
+                    pDataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m")
+                }
+                // 右列(3枚・上は空欄=下揃え)
+                VStack(spacing: 9) {
+                    Spacer(minLength: 0)
+                    pDataCard("TIME", value: durationString(ride.ridingSeconds), unit: "")
+                    pDataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
+                        .onLongPressGesture { ride.resetTrip() }
+                    pDataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
+                }
             }
             .padding(.horizontal, 20)
             .padding(.top, 8)
-
-            // データカード 2列グリッド(TOTALは2列ぶち抜き・左揃え)
-            Grid(horizontalSpacing: 11, verticalSpacing: 11) {
-                GridRow {
-                    dataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km",
-                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
-                        .onLongPressGesture { ride.resetTrip() }
-                    dataCard("TIME", value: durationString(ride.ridingSeconds), unit: "",
-                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
-                }
-                GridRow {
-                    dataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m",
-                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
-                    dataCard("BATTERY", value: "\(ride.phoneBatteryPercent)", unit: "%",
-                             valueColor: StateColor.battery(ride.phoneBatteryPercent),
-                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
-                }
-                GridRow {
-                    dataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km",
-                             valueSize: 32, labelSize: 12, corner: 14, centered: false)
-                        .gridCellColumns(2)
-                }
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 11)
+            .padding(.bottom, 12)
 
             Spacer(minLength: 0)
         }
@@ -279,6 +270,80 @@ struct DashboardView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, centered ? 6 : 8)
         .overlay(RoundedRectangle(cornerRadius: corner).stroke(Palette.borderWeak, lineWidth: 1.5))
+    }
+
+    // MARK: - 縦画面専用カード(70pt固定高)
+
+    /// TPMS カード(縦): アイコン+ラベル左揃え、値中央、高さ70pt、強枠16r
+    private func pTPMSCard(_ title: String, bar: Double?, assigned: Bool) -> some View {
+        let valueText = bar.map { String(format: "%.1f", $0) } ?? "-.--"
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    TireIcon()
+                    Text(title)
+                        .font(motoLabelFont(12))
+                        .tracking(1.5)
+                        .foregroundColor(Palette.label)
+                    if !assigned {
+                        Text("未割当")
+                            .font(.system(size: 10))
+                            .foregroundColor(Palette.amber)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(valueText)
+                        .font(motoNumberFont(34, .bold))
+                        .foregroundColor(StateColor.pressure(bar))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("bar")
+                        .font(.system(size: 13))
+                        .foregroundColor(Palette.textMid)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 70)
+        .padding(.horizontal, 15)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.borderStrong, lineWidth: 1.5))
+        .contentShape(Rectangle())
+        .onTapGesture { showSniffer = true }
+    }
+
+    /// データカード(縦): ラベル左揃え、値中央、高さ70pt、弱枠14r
+    private func pDataCard(_ label: String, value: String, unit: String,
+                            valueColor: Color = Palette.textHi) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(label)
+                    .font(motoLabelFont(12))
+                    .tracking(1.5)
+                    .foregroundColor(Palette.label)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(value)
+                        .font(motoNumberFont(28, .bold))
+                        .foregroundColor(valueColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    if !unit.isEmpty {
+                        Text(unit)
+                            .font(.system(size: 13))
+                            .foregroundColor(Palette.textMid)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 70)
+        .padding(.horizontal, 15)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.borderWeak, lineWidth: 1.5))
     }
 
     // MARK: - データ派生
