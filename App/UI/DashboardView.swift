@@ -55,8 +55,8 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                     HStack(spacing: 12) {
-                        tpmsCard("FRONT", bar: frontBar, valueSize: 46).frame(width: 198)
-                        tpmsCard("REAR", bar: rearBar, valueSize: 46).frame(width: 198)
+                        tpmsCard("FRONT", bar: frontBar, temp: frontTemp, valueSize: 46).frame(width: 198)
+                        tpmsCard("REAR", bar: rearBar, temp: rearTemp, valueSize: 46).frame(width: 198)
                     }
                 }
                 .padding(.top, 6)
@@ -126,8 +126,8 @@ struct DashboardView: View {
             VStack(spacing: 9) {
                 // 上段: FRONT | REAR 横並び
                 HStack(spacing: 9) {
-                    pTPMSCard("FRONT", bar: frontBar, assigned: tpms.assignments[.front] != nil)
-                    pTPMSCard("REAR",  bar: rearBar,  assigned: tpms.assignments[.rear]  != nil)
+                    pTPMSCard("FRONT", bar: frontBar, temp: frontTemp, assigned: tpms.assignments[.front] != nil)
+                    pTPMSCard("REAR",  bar: rearBar,  temp: rearTemp,  assigned: tpms.assignments[.rear]  != nil)
                 }
                 // 下段2列: 左2枚 / 右3枚(下揃え)
                 HStack(alignment: .bottom, spacing: 9) {
@@ -206,7 +206,7 @@ struct DashboardView: View {
 
     // MARK: - TPMSカード(値は中央揃え)
 
-    private func tpmsCard(_ title: String, bar: Double?, valueSize: CGFloat) -> some View {
+    private func tpmsCard(_ title: String, bar: Double?, temp: Double?, valueSize: CGFloat) -> some View {
         let valueText = bar.map { String(format: "%.1f", $0) } ?? "-.--"
         let assigned = (title == "FRONT") ? tpms.assignments[.front] != nil
                                           : tpms.assignments[.rear] != nil
@@ -227,9 +227,15 @@ struct DashboardView: View {
                 Text(valueText)
                     .font(motoNumberFont(valueSize, .bold))
                     .foregroundColor(StateColor.pressure(bar))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 Text("bar")
                     .font(.system(size: 14))
                     .foregroundColor(Palette.textMid)
+                Text(tempText(temp))
+                    .font(.system(size: 14))
+                    .foregroundColor(Palette.textMid)
+                    .padding(.leading, 6)
             }
             .frame(maxWidth: .infinity, alignment: .center)
         }
@@ -282,7 +288,7 @@ struct DashboardView: View {
     // MARK: - 縦画面専用カード(70pt固定高)
 
     /// TPMS カード(縦): アイコン+ラベル左揃え、値中央、高さ70pt、強枠16r
-    private func pTPMSCard(_ title: String, bar: Double?, assigned: Bool) -> some View {
+    private func pTPMSCard(_ title: String, bar: Double?, temp: Double?, assigned: Bool) -> some View {
         let valueText = bar.map { String(format: "%.1f", $0) } ?? "-.--"
         return VStack(spacing: 0) {
             Spacer(minLength: 0)
@@ -308,6 +314,10 @@ struct DashboardView: View {
                     Text("bar")
                         .font(.system(size: 13))
                         .foregroundColor(Palette.textMid)
+                    Text(tempText(temp))
+                        .font(.system(size: 13))
+                        .foregroundColor(Palette.textMid)
+                        .padding(.leading, 6)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -362,6 +372,19 @@ struct DashboardView: View {
     private var rearBar: Double? {
         guard let r = tpms.readings[.rear], !r.isStale else { return nil }
         return r.pressureBar
+    }
+    private var frontTemp: Double? {
+        guard let r = tpms.readings[.front], !r.isStale else { return nil }
+        return r.temperatureC
+    }
+    private var rearTemp: Double? {
+        guard let r = tpms.readings[.rear], !r.isStale else { return nil }
+        return r.temperatureC
+    }
+
+    /// TPMS温度の表示文字列(整数℃)。未接続は "--℃"。
+    private func tempText(_ c: Double?) -> String {
+        c.map { "\(Int($0.rounded()))℃" } ?? "--℃"
     }
 
     private var headingText: String {
