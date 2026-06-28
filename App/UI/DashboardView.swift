@@ -55,8 +55,8 @@ struct DashboardView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                     HStack(spacing: 12) {
-                        tpmsCard("FRONT", bar: frontBar, temp: frontTemp, valueSize: 46).frame(width: 198)
-                        tpmsCard("REAR", bar: rearBar, temp: rearTemp, valueSize: 46).frame(width: 198)
+                        tpmsCard("FRONT", bar: frontBar, temp: frontTemp, valueSize: 38).frame(width: 198)
+                        tpmsCard("REAR", bar: rearBar, temp: rearTemp, valueSize: 38).frame(width: 198)
                     }
                 }
                 .padding(.top, 6)
@@ -210,37 +210,41 @@ struct DashboardView: View {
         let valueText = bar.map { String(format: "%.1f", $0) } ?? "-.--"
         let assigned = (title == "FRONT") ? tpms.assignments[.front] != nil
                                           : tpms.assignments[.rear] != nil
-        return VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                TireIcon()
-                Text(title)
-                    .font(motoLabelFont(13))
-                    .tracking(1.5)
-                    .foregroundColor(Palette.label)
-                if !assigned {
-                    Text("未割当")
-                        .font(.system(size: 10))
-                        .foregroundColor(Palette.amber)
+        return VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    TireIcon()
+                    Text(title)
+                        .font(motoLabelFont(13))
+                        .tracking(1.5)
+                        .foregroundColor(Palette.label)
+                    if !assigned {
+                        Text("未割当")
+                            .font(.system(size: 10))
+                            .foregroundColor(Palette.amber)
+                    }
                 }
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(valueText)
+                        .font(motoNumberFont(valueSize, .bold))
+                        .foregroundColor(StateColor.pressure(bar))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("bar")
+                        .font(.system(size: 14))
+                        .foregroundColor(Palette.textMid)
+                    Text(tempText(temp))
+                        .font(.system(size: 14))
+                        .foregroundColor(Palette.textMid)
+                        .padding(.leading, 6)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(valueText)
-                    .font(motoNumberFont(valueSize, .bold))
-                    .foregroundColor(StateColor.pressure(bar))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                Text("bar")
-                    .font(.system(size: 14))
-                    .foregroundColor(Palette.textMid)
-                Text(tempText(temp))
-                    .font(.system(size: 14))
-                    .foregroundColor(Palette.textMid)
-                    .padding(.leading, 6)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
+            Spacer(minLength: 0)
         }
-        .padding(EdgeInsets(top: 11, leading: 16, bottom: 13, trailing: 16))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 80)                       // 下辺ストリップ(h80)と高さを統一
+        .padding(.horizontal, 16)
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.borderStrong, lineWidth: 1.5))
         .contentShape(Rectangle())
         .onTapGesture { showSniffer = true }
