@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// 速度ゲージ(ハンドオフ「上辺水平バー」v2)。0〜160 km/h を画面上辺に水平表示。
-/// 全周ボーダー＋角丸の低いトラック面の上に、全高の目盛り2層(minor 10km/h刻み /
-/// major 40km/h刻み、色だけ違う)、左端から現在速度割合まで伸びるライムの発光フィル、
+/// 重なり順: トラック面 → 速度フィル → 目盛り2層(minor 10km/h / major 40km/h、色のみ差)。
+/// フィルは目盛り・MAXピルの背面に置き、目盛りが速度で消えないようにする。
+/// フィル色は速度域で変化(~80=ライム / 80~120=アンバー / 120~=レッド, StateColor.gauge)。
 /// 下に 40/80/120/160 のラベル、横画面では右端にMAXピル(長押しでリセット)。
 struct GaugeBar: View {
     let speedKMH: Double
@@ -31,6 +32,14 @@ struct GaugeBar: View {
                     ZStack(alignment: .leading) {
                         Rectangle().fill(Palette.track)
 
+                        // 速度フィル(速度域で色変化)。マス目・MAXピルの背面に描く
+                        Rectangle()
+                            .fill(StateColor.gauge(speedKMH))
+                            .frame(width: fillW)
+                            .shadow(color: StateColor.gauge(speedKMH).opacity(0.55), radius: 8)
+                            .animation(.linear(duration: 0.12), value: speedKMH)
+
+                        // 目盛り(フィルの上 = 速度が伸びても消えない)
                         Canvas { ctx, size in
                             let n = 16  // 10km/h刻み = 1/16。minor/majorとも全高、色のみ差
                             for i in 0...n {
@@ -43,12 +52,6 @@ struct GaugeBar: View {
                                            lineWidth: 2)
                             }
                         }
-
-                        Rectangle()
-                            .fill(Palette.lime)
-                            .frame(width: fillW)
-                            .shadow(color: Palette.lime.opacity(0.65), radius: 8)
-                            .animation(.linear(duration: 0.12), value: speedKMH)
                     }
                     .frame(height: barHeight)
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius))

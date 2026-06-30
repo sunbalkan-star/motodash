@@ -37,6 +37,9 @@ enum StateColor {
     static var cautionBar: Double = 2.2       // これ未満=アンバー
     static var lowBatteryPercent: Int = 20    // これ以下=赤
 
+    static var gaugeAmberKMH: Double = 80     // これ以上=アンバー
+    static var gaugeRedKMH: Double = 120      // これ以上=レッド
+
     /// タイヤ空気圧の色。未接続(nil)は dim。
     static func pressure(_ v: Double?) -> Color {
         guard let v else { return Palette.dim }
@@ -47,6 +50,13 @@ enum StateColor {
 
     static func battery(_ percent: Int) -> Color {
         percent <= lowBatteryPercent ? Palette.red : Palette.textHi
+    }
+
+    /// 速度ゲージのフィル色(速度域で変化)。~80=ライム / 80~120=アンバー / 120~=レッド。
+    static func gauge(_ kmh: Double) -> Color {
+        if kmh >= gaugeRedKMH   { return Palette.red }
+        if kmh >= gaugeAmberKMH { return Palette.amber }
+        return Palette.lime
     }
 }
 
