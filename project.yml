@@ -17,6 +17,9 @@ targets:
   MotoDash:
     type: application
     platform: iOS
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     sources:
       - App
       - Shared
