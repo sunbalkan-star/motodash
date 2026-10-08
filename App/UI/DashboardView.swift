@@ -37,6 +37,9 @@ struct DashboardView: View {
 
     // MARK: - 横レイアウト(主画面)
 
+    /// 縦方向の内訳(812×375 キャンバス): ステータスバー 55 + ゲージ 56 + ヒーロー行(上6 + 速度110pt 行高≒131)
+    /// + ストリップ(上22 + 80 + 下10) + 下余白 14 = 374pt。
+    /// ※ iOS セーフエリア(横画面の下 約21pt)を差し引く実機では、速度数字は minimumScaleFactor で縮小される
     private var landscapeLayout: some View {
         VStack(spacing: 0) {
             statusBar(time: dateTimeString(), compassSize: 20, timeSize: 24)
@@ -54,15 +57,15 @@ struct DashboardView: View {
                 HStack(alignment: .bottom, spacing: 26) {
                     HStack(alignment: .bottom, spacing: 12) {
                         Text(speedText)
-                            .font(motoNumberFont(132, .heavy))
-                            .tracking(-4)
+                            .font(motoNumberFont(110, .heavy))   // 行高 ≒131pt。132pt だと収まらず自動縮小されていた
+                            .tracking(-3.3)
                             .foregroundColor(Palette.textHi)
                             .lineLimit(1)
                             .minimumScaleFactor(0.5)
                         Text("km/h")
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(Palette.lime)
-                            .padding(.bottom, 16)
+                            .padding(.bottom, 13)
                     }
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
@@ -100,7 +103,7 @@ struct DashboardView: View {
                         .frame(maxHeight: .infinity)
                 }
                 .frame(height: 80)
-                .padding(.top, 28)
+                .padding(.top, 22)
                 .padding(.bottom, 10)
             }
             .frame(maxHeight: .infinity)
