@@ -33,8 +33,8 @@ extension Color {
 
 /// 状態色ロジック(ハンドオフ「状態色ロジック」より。しきい値は調整可能パラメータ)
 enum StateColor {
-    static var lowPressureBar: Double = 2.0   // これ未満=赤
-    static var cautionBar: Double = 2.2       // これ未満=アンバー
+    static var lowPressureBar: Double { TPMSThreshold.lowBar }     // これ未満=赤(通知と共通)
+    static var cautionBar: Double { TPMSThreshold.cautionBar }     // これ未満=アンバー
     static var lowBatteryPercent: Int = 20    // これ以下=赤
 
     static var gaugeAmberKMH: Double = 80     // これ以上=アンバー

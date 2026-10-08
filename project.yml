@@ -47,6 +47,7 @@ targets:
           - location
         NSLocationWhenInUseUsageDescription: "速度・高度・走行距離の計測に位置情報を使用します。"
         NSBluetoothAlwaysUsageDescription: "TPMSタイヤ空気圧センサーの受信に使用します。"
+        NSMotionUsageDescription: "気圧センサーで高度を計測するために使用します。"
 
   MotoDashWidgetExtension:
     type: app-extension

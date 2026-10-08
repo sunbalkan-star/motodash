@@ -11,6 +11,8 @@ enum SharedStore {
     private static let totalKey = "ride.totalMeters"
     private static let timeKey = "ride.ridingSeconds"
     private static let updatedAtKey = "ride.updatedAt"
+    private static let tripBKey = "ride.tripBMeters"
+    private static let tripBTimeKey = "ride.tripBSeconds"
 
     static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
@@ -32,6 +34,17 @@ enum SharedStore {
     static var ridingSeconds: Double {
         get { defaults.double(forKey: timeKey) }
         set { defaults.set(newValue, forKey: timeKey) }
+    }
+
+    /// Trip B(手動リセット用の2系統目)。ウィジェットは Trip A(tripMeters)のみ表示
+    static var tripBMeters: Double {
+        get { defaults.double(forKey: tripBKey) }
+        set { defaults.set(newValue, forKey: tripBKey) }
+    }
+
+    static var tripBSeconds: Double {
+        get { defaults.double(forKey: tripBTimeKey) }
+        set { defaults.set(newValue, forKey: tripBTimeKey) }
     }
 
     static var updatedAt: Date? {

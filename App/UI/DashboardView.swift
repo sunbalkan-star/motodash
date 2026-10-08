@@ -7,6 +7,12 @@ struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
     @State private var showSniffer = false
+    @State private var showRideLog = false
+    /// TRIP カードの表示切替(タップで A/B)。次回起動時も維持
+    @AppStorage("dashboard.showTripB") private var showTripB = false
+    /// 時計・TPMS 期限切れ表示を GPS 更新に依存せず進める
+    @State private var now = Date()
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         GeometryReader { geo in
@@ -19,8 +25,14 @@ struct DashboardView: View {
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
         .sheet(isPresented: $showSniffer) {
-            SnifferView().environmentObject(tpms)
+            SnifferView()
+                .environmentObject(tpms)
+                .environmentObject(tpms.sniffer)
         }
+        .sheet(isPresented: $showRideLog) {
+            RideLogView().environmentObject(ride)
+        }
+        .onReceive(ticker) { now = $0 }
     }
 
     // MARK: - 横レイアウト(主画面)
@@ -72,13 +84,17 @@ struct DashboardView: View {
                     dataCard("ALTITUDE", value: "\(Int(ride.altitudeM))", unit: "m",
                              valueSize: 30, labelSize: 11, corner: 12, centered: true)
                         .frame(maxHeight: .infinity)
-                    dataCard("TIME", value: durationString(ride.ridingSeconds), unit: "",
+                    dataCard("TIME", value: durationString(showTripB ? ride.tripBSeconds : ride.ridingSeconds), unit: "",
                              valueSize: 30, labelSize: 11, corner: 12, centered: true)
                         .frame(maxHeight: .infinity)
-                    dataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km",
+                        .contentShape(Rectangle())
+                        .onTapGesture { showRideLog = true }
+                    dataCard(tripLabel, value: tripValue, unit: "km",
                              valueSize: 30, labelSize: 11, corner: 12, centered: true)
                         .frame(maxHeight: .infinity)
-                        .onLongPressGesture { ride.resetTrip() }
+                        .contentShape(Rectangle())
+                        .onTapGesture { showTripB.toggle() }
+                        .onLongPressGesture { resetDisplayedTrip() }
                     dataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km",
                              valueSize: 30, labelSize: 11, corner: 12, centered: true)
                         .frame(maxHeight: .infinity)
@@ -139,9 +155,13 @@ struct DashboardView: View {
                     }
                     // 右列(3枚・下揃え: 左より79pt長いため自動的に上が空く)
                     VStack(spacing: 9) {
-                        pDataCard("TIME", value: durationString(ride.ridingSeconds), unit: "")
-                        pDataCard("TRIP", value: String(format: "%.1f", ride.tripMeters / 1000), unit: "km")
-                            .onLongPressGesture { ride.resetTrip() }
+                        pDataCard("TIME", value: durationString(showTripB ? ride.tripBSeconds : ride.ridingSeconds), unit: "")
+                            .contentShape(Rectangle())
+                            .onTapGesture { showRideLog = true }
+                        pDataCard(tripLabel, value: tripValue, unit: "km")
+                            .contentShape(Rectangle())
+                            .onTapGesture { showTripB.toggle() }
+                            .onLongPressGesture { resetDisplayedTrip() }
                         pDataCard("TOTAL", value: String(format: "%.0f", ride.totalMeters / 1000), unit: "km")
                     }
                 }
@@ -374,6 +394,15 @@ struct DashboardView: View {
         ride.hasGPSFix ? "\(Int(ride.speedKMH.rounded()))" : "--"
     }
 
+    /// TRIP カード: タップで A/B 切替、長押しで表示中の側をリセット
+    private var tripLabel: String { showTripB ? "TRIP B" : "TRIP A" }
+    private var tripValue: String {
+        String(format: "%.1f", (showTripB ? ride.tripBMeters : ride.tripMeters) / 1000)
+    }
+    private func resetDisplayedTrip() {
+        if showTripB { ride.resetTripB() } else { ride.resetTrip() }
+    }
+
     private var frontBar: Double? {
         guard let r = tpms.readings[.front], !r.isStale else { return nil }
         return r.pressureBar
@@ -415,14 +444,14 @@ struct DashboardView: View {
 
     /// 横画面の日時: YYYY-M-D H:mm(分のみゼロ埋め)
     private func dateTimeString() -> String {
-        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: Date())
+        let c = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: now)
         let mm = String(format: "%02d", c.minute ?? 0)
         return "\(c.year ?? 0)-\(c.month ?? 0)-\(c.day ?? 0) \(c.hour ?? 0):\(mm)"
     }
 
     /// 縦画面の時刻: HH:MM
     private func clockString() -> String {
-        let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
+        let c = Calendar.current.dateComponents([.hour, .minute], from: now)
         return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
     }
 

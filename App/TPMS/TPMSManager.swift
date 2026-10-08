@@ -11,6 +11,39 @@ struct RawBLEPacket: Identifiable {
     var lastSeen: Date
 }
 
+/// スニファー画面用の生パケット記録。TPMSManager とは別の ObservableObject にして、
+/// 周囲の全BLE機器の受信でダッシュボードが再描画されないようにする。
+final class BLESniffer: ObservableObject {
+    @Published private(set) var packets: [RawBLEPacket] = []
+
+    /// スニファー画面の表示中のみ記録する(非表示にしたら一覧を捨ててメモリも解放)
+    var isActive = false {
+        didSet { if !isActive { packets.removeAll() } }
+    }
+
+    /// この秒数受信が無いデバイスは一覧から外す
+    private let expireAfter: TimeInterval = 30
+
+    func record(id: UUID, name: String?, hex: String, rssi: Int) {
+        guard isActive else { return }
+        let now = Date()
+        var list = packets.filter { now.timeIntervalSince($0.lastSeen) <= expireAfter }
+        if let idx = list.firstIndex(where: { $0.id == id }) {
+            list[idx].localName = name ?? list[idx].localName
+            list[idx].manufacturerHex = hex
+            list[idx].rssi = rssi
+            list[idx].lastSeen = now
+        } else {
+            list.append(RawBLEPacket(
+                id: id, localName: name,
+                manufacturerHex: hex, rssi: rssi, lastSeen: now
+            ))
+        }
+        list.sort { $0.rssi > $1.rssi }
+        packets = list   // publish は1受信につき1回
+    }
+}
+
 /// TPMSの中枢。BLEスキャン → パーサー群に流す → 前後輪に振り分け。
 /// センサー未購入でもスニファーとして動き、購入後は割当てるだけで連動する。
 final class TPMSManager: NSObject, ObservableObject {
@@ -24,8 +57,10 @@ final class TPMSManager: NSObject, ObservableObject {
     // MARK: Published状態
     @Published var bluetoothReady = false
     @Published var readings: [WheelPosition: TPMSReading] = [:]
-    @Published var rawPackets: [RawBLEPacket] = []   // スニファー用
     @Published var isScanning = false
+
+    /// スニファー画面用(別オブジェクト。ここの更新はダッシュボードを再描画しない)
+    let sniffer = BLESniffer()
 
     // MARK: 前後輪へのセンサー割当(UserDefaultsに永続化)
     @Published var assignments: [WheelPosition: UUID] = [:] {
@@ -35,10 +70,10 @@ final class TPMSManager: NSObject, ObservableObject {
     private var central: CBCentralManager!
     private var lastAlertDate: [WheelPosition: Date] = [:]
 
-    /// 低圧アラート閾値(bar)。車種に合わせて調整
-    var lowPressureThreshold: Double = 1.8
     /// アラートの再通知間隔(秒)
     private let alertCooldown: TimeInterval = 10 * 60
+    /// 値が変わらない受信はこの秒数まで反映を省く(再描画抑制。staleAfter より十分短く)
+    private let readingRefreshInterval: TimeInterval = 10
 
     override init() {
         super.init()
@@ -64,7 +99,10 @@ final class TPMSManager: NSObject, ObservableObject {
         // 同じセンサーが別ポジションに割当て済みなら外す
         for (pos, id) in assignments where id == sensorID {
             assignments[pos] = nil
+            readings[pos] = nil
         }
+        // 付け替え時は前のセンサーの値を残さない
+        if assignments[position] != sensorID { readings[position] = nil }
         assignments[position] = sensorID
     }
 
@@ -97,7 +135,8 @@ final class TPMSManager: NSObject, ObservableObject {
     // MARK: - 低圧アラート(ローカル通知)
 
     private func checkLowPressure(_ reading: TPMSReading, position: WheelPosition) {
-        guard reading.pressureBar < lowPressureThreshold else { return }
+        let threshold = TPMSThreshold.lowBar
+        guard reading.pressureBar < threshold else { return }
         let last = lastAlertDate[position] ?? .distantPast
         guard Date().timeIntervalSince(last) > alertCooldown else { return }
         lastAlertDate[position] = Date()
@@ -107,7 +146,7 @@ final class TPMSManager: NSObject, ObservableObject {
         content.body = String(
             format: "%@: %.2f bar(閾値 %.2f bar)",
             position == .front ? "フロント" : "リア",
-            reading.pressureBar, lowPressureThreshold
+            reading.pressureBar, threshold
         )
         content.sound = .defaultCritical
         let request = UNNotificationRequest(
@@ -137,9 +176,9 @@ extension TPMSManager: CBCentralManagerDelegate {
             ?? (advertisementData[CBAdvertisementDataLocalNameKey] as? String)
         let mfgData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
 
-        // 1) スニファー記録(全デバイス、Manufacturer Data持ちのみ)
-        if let mfgData {
-            updateRawPacket(
+        // 1) スニファー記録(画面表示中のみ・Manufacturer Data持ちのみ)
+        if sniffer.isActive, let mfgData {
+            sniffer.record(
                 id: sensorID, name: localName,
                 hex: mfgData.hexString, rssi: RSSI.intValue
             )
@@ -152,23 +191,15 @@ extension TPMSManager: CBCentralManagerDelegate {
 
         // 3) 割当て済みポジションに反映
         for (position, assignedID) in assignments where assignedID == sensorID {
+            // 同じ値を直近に反映済みなら publish しない(センサーは毎秒発信するため)
+            if let prev = readings[position],
+               prev.pressureBar == reading.pressureBar,
+               prev.temperatureC == reading.temperatureC,
+               reading.timestamp.timeIntervalSince(prev.timestamp) < readingRefreshInterval {
+                continue
+            }
             readings[position] = reading
             checkLowPressure(reading, position: position)
         }
-    }
-
-    private func updateRawPacket(id: UUID, name: String?, hex: String, rssi: Int) {
-        if let idx = rawPackets.firstIndex(where: { $0.id == id }) {
-            rawPackets[idx].localName = name ?? rawPackets[idx].localName
-            rawPackets[idx].manufacturerHex = hex
-            rawPackets[idx].rssi = rssi
-            rawPackets[idx].lastSeen = Date()
-        } else {
-            rawPackets.append(RawBLEPacket(
-                id: id, localName: name,
-                manufacturerHex: hex, rssi: rssi, lastSeen: Date()
-            ))
-        }
-        rawPackets.sort { $0.rssi > $1.rssi }
     }
 }

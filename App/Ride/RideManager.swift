@@ -1,9 +1,10 @@
 import Foundation
 import CoreLocation
+import CoreMotion
 import UIKit
 import WidgetKit
 
-/// GPS由来の走行データ(速度・高度・Trip/Total距離・走行時間)
+/// 走行データ: GPS(速度・Trip A/B・Total・走行時間) / 気圧センサー(高度) / 磁気(方位) / 電池
 @MainActor
 final class RideManager: NSObject, ObservableObject {
     @Published var speedKMH: Double = 0
@@ -11,7 +12,9 @@ final class RideManager: NSObject, ObservableObject {
     @Published var altitudeM: Double = 0
     @Published var tripMeters: Double = 0
     @Published var totalMeters: Double = 0
-    @Published var ridingSeconds: TimeInterval = 0
+    @Published var ridingSeconds: TimeInterval = 0   // Trip A の走行時間
+    @Published var tripBMeters: Double = 0
+    @Published var tripBSeconds: TimeInterval = 0
     @Published var gpsStatus = "GPS待機中"
     @Published var phoneBatteryPercent: Int = 0
     @Published var headingDegrees: Double = 0     // コンパス方位(0=北)
@@ -19,6 +22,11 @@ final class RideManager: NSObject, ObservableObject {
     @Published var hasGPSFix = false
 
     private let manager = CLLocationManager()
+    private let altimeter = CMAltimeter()
+    /// 気圧高度を使用中か(非対応機種・権限拒否時は GPS 高度にフォールバック)
+    private var usesBarometer = false
+    /// 走行ログ(GPX書き出し用)
+    let logger = RideLogger()
     private var lastLocation: CLLocation?
     private var lastFixDate: Date?
     private var fixWatchdog: Timer?
@@ -44,6 +52,8 @@ final class RideManager: NSObject, ObservableObject {
         tripMeters = SharedStore.tripMeters
         totalMeters = SharedStore.totalMeters
         ridingSeconds = SharedStore.ridingSeconds
+        tripBMeters = SharedStore.tripBMeters
+        tripBSeconds = SharedStore.tripBSeconds
 
         UIDevice.current.isBatteryMonitoringEnabled = true
         refreshBattery()
@@ -74,6 +84,7 @@ final class RideManager: NSObject, ObservableObject {
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
+        startAltimeter()
         if CLLocationManager.headingAvailable() {
             // 方位は端末の向き基準で返るため、横マウント時は向きを伝えないと90°ずれる
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
@@ -118,9 +129,41 @@ final class RideManager: NSObject, ObservableObject {
         persist(force: true)
     }
 
+    /// Trip B のみリセット(給油間隔など手動管理用。Trip A・最高速には影響しない)
+    func resetTripB() {
+        tripBMeters = 0
+        tripBSeconds = 0
+        persist(force: true)
+    }
+
     /// 最高速のみリセット(ゲージのMAX表示を長押し)。次のGPS更新から再追従。
     func resetMaxSpeed() {
         maxSpeedKMH = 0
+    }
+
+    /// 平均速度(km/h)= 距離 ÷ 走行時間(停車時間は含まない)。走行1分未満は nil
+    static func averageKMH(meters: Double, seconds: TimeInterval) -> Double? {
+        seconds >= 60 ? meters / seconds * 3.6 : nil
+    }
+
+    /// 気圧センサー+GPS の絶対高度(iOS 15+, 対応機種のみ)。GPS 単独より安定する
+    private func startAltimeter() {
+        guard !usesBarometer, CMAltimeter.isAbsoluteAltitudeAvailable() else { return }
+        usesBarometer = true
+        altimeter.startAbsoluteAltitudeUpdates(to: .main) { [weak self] data, error in
+            let altitude = data?.altitude
+            let failed = error != nil
+            Task { @MainActor in
+                guard let self else { return }
+                if let altitude {
+                    self.altitudeM = altitude
+                } else if failed {
+                    // 権限拒否など: GPS 高度に戻す
+                    self.altimeter.stopAbsoluteAltitudeUpdates()
+                    self.usesBarometer = false
+                }
+            }
+        }
     }
 
     private func refreshBattery() {
@@ -140,6 +183,8 @@ final class RideManager: NSObject, ObservableObject {
         SharedStore.tripMeters = tripMeters
         SharedStore.totalMeters = totalMeters
         SharedStore.ridingSeconds = ridingSeconds
+        SharedStore.tripBMeters = tripBMeters
+        SharedStore.tripBSeconds = tripBSeconds
         if force || Date().timeIntervalSince(lastWidgetSync) > 60 {
             lastWidgetSync = Date()
             WidgetCenter.shared.reloadAllTimelines()
@@ -195,7 +240,7 @@ extension RideManager: CLLocationManagerDelegate {
         gpsStatus = "GPS ✅ (±\(Int(location.horizontalAccuracy))m)"
         hasGPSFix = true
         lastFixDate = Date()
-        altitudeM = location.altitude
+        if !usesBarometer { altitudeM = location.altitude }
 
         // 速度: 負値(無効)は0扱い、軽くスムージングして針の暴れを抑える
         let rawKMH = max(0, location.speed) * 3.6
@@ -212,6 +257,9 @@ extension RideManager: CLLocationManagerDelegate {
                 tripMeters += delta
                 totalMeters += delta
                 ridingSeconds += dt
+                tripBMeters += delta
+                tripBSeconds += dt
+                logger.append(location, altitude: altitudeM)
             }
         }
         lastLocation = location

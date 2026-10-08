@@ -20,6 +20,16 @@ struct TPMSReading {
     var isStale: Bool { Date().timeIntervalSince(timestamp) > Self.staleAfter }
 }
 
+// MARK: - 空気圧しきい値
+
+/// 画面の状態色(StateColor)と低圧通知(TPMSManager)で共有する唯一の定義。車種に合わせて調整
+enum TPMSThreshold {
+    /// これ未満=低圧(赤表示・通知)
+    static var lowBar: Double = 2.0
+    /// これ未満=注意(アンバー表示)
+    static var cautionBar: Double = 2.2
+}
+
 // MARK: - パーサープロトコル(ここがプラグインポイント)
 
 /// BLEアドバタイズからTPMS値を取り出すパーサーのインターフェース。

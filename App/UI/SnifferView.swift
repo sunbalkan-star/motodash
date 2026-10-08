@@ -8,6 +8,7 @@ import SwiftUI
 ///   4. 値が出ない場合は hex をメモしてパーサーを調整
 struct SnifferView: View {
     @EnvironmentObject var tpms: TPMSManager
+    @EnvironmentObject var sniffer: BLESniffer
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -21,7 +22,7 @@ struct SnifferView: View {
                         Text(tpms.bluetoothReady ? "Bluetooth ON / スキャン中" : "Bluetooth OFF")
                             .font(.caption)
                         Spacer()
-                        Text("\(tpms.rawPackets.count)台検出")
+                        Text("\(sniffer.packets.count)台検出")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -32,12 +33,12 @@ struct SnifferView: View {
                 }
 
                 Section("検出デバイス(電波強度順)") {
-                    if tpms.rawPackets.isEmpty {
+                    if sniffer.packets.isEmpty {
                         Text("スキャン中…(センサーは加圧時のみ発信する機種あり)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(tpms.rawPackets) { packet in
+                    ForEach(sniffer.packets) { packet in
                         packetRow(packet)
                     }
                 }
@@ -63,6 +64,9 @@ struct SnifferView: View {
                     }
                 }
             }
+            // 表示中だけ生パケットを記録(閉じたら停止・破棄)
+            .onAppear { sniffer.isActive = true }
+            .onDisappear { sniffer.isActive = false }
             .navigationTitle("TPMSセンサー設定")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
