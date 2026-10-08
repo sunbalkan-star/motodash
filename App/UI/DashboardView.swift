@@ -49,9 +49,9 @@ struct DashboardView: View {
 
     /// 縦方向の内訳(812×375 キャンバス):
     ///   上 8 + ステータスバー 36 + 間 8 + ゲージ行 46(バー30 + 4 + 目盛12)
-    ///   + 中段 165(TPMS 80 + 5 + 80。速度 110pt 行高≒131 は下詰め、残り 34 は上に空く)
-    ///   + ストリップ 112(上22 + 80 + 下10) = 375pt。
-    /// 横方向: ノッチ側 46 + コンテンツ 748 + 反対側 18。中段 = 速度エリア(可変 ≒534) + 16 + TPMS 198。
+    ///   + 中段 135(可変。速度 110pt 行高≒131 + 余り 4。TPMS h80 は下詰め)
+    ///   + ストリップ 142(上22 + 80 + 下40) = 375pt。下余白をさらに広げると速度数字が縮小される。
+    /// 横方向: ノッチ側 46 + コンテンツ 748 + 反対側 18。中段 = 速度エリア(可変 ≒328) + 16 + TPMS 横2枚 404(198 + 8 + 198)。
     /// セーフエリアは無視する(画面全体 = キャンバス)。
     private func landscapeLayout(leading: CGFloat, trailing: CGFloat) -> some View {
         VStack(spacing: 0) {
@@ -60,7 +60,7 @@ struct DashboardView: View {
 
             gaugeRow(.landscape)
 
-            // 中段: ヒーロー速度(右揃え・下詰め) + TPMS 縦2枚
+            // 中段: ヒーロー速度(右揃え・下詰め) + TPMS 横2枚(下端揃え)
             HStack(alignment: .bottom, spacing: 16) {
                 HStack(alignment: .bottom, spacing: 10) {
                     Text(speedText)
@@ -73,13 +73,13 @@ struct DashboardView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
 
-                VStack(spacing: 5) {
+                HStack(spacing: 8) {
                     tpmsCard("FRONT", bar: frontBar, temp: frontTemp,
                              assigned: tpms.assignments[.front] != nil, metrics: .landscape)
                     tpmsCard("REAR", bar: rearBar, temp: rearTemp,
                              assigned: tpms.assignments[.rear] != nil, metrics: .landscape)
                 }
-                .frame(width: 198)
+                .frame(width: 198 * 2 + 8)
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
 
@@ -89,7 +89,7 @@ struct DashboardView: View {
             }
             .frame(height: 80)
             .padding(.top, 22)
-            .padding(.bottom, 10)
+            .padding(.bottom, 40)   // ホームインジケータとの間隔を確保
         }
         .padding(.top, 8)
         .padding(.leading, leading)
