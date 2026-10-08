@@ -41,7 +41,7 @@ struct DashboardView: View {
                 // ヒーロー速度(右揃え) + TPMS 2枚: 上詰め固定
                 HStack(alignment: .bottom, spacing: 26) {
                     HStack(alignment: .bottom, spacing: 12) {
-                        Text("\(Int(ride.speedKMH.rounded()))")
+                        Text(speedText)
                             .font(motoNumberFont(132, .heavy))
                             .tracking(-4)
                             .foregroundColor(Palette.textHi)
@@ -108,7 +108,7 @@ struct DashboardView: View {
 
             // ヒーロー速度(中央)
             VStack(spacing: 8) {
-                Text("\(Int(ride.speedKMH.rounded()))")
+                Text(speedText)
                     .font(motoNumberFont(188, .heavy))
                     .tracking(-7)
                     .foregroundColor(Palette.textHi)
@@ -170,7 +170,7 @@ struct DashboardView: View {
 
             // 現在速度ピル
             HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text("\(Int(ride.speedKMH.rounded()))")
+                Text(speedText)
                     .font(motoNumberFont(18, .bold))
                     .foregroundColor(Palette.textHi)
                 Text("Km/h")
@@ -368,6 +368,11 @@ struct DashboardView: View {
     }
 
     // MARK: - データ派生
+
+    /// GPSロスト中は "--"(最後の速度で固まった表示を出さない)
+    private var speedText: String {
+        ride.hasGPSFix ? "\(Int(ride.speedKMH.rounded()))" : "--"
+    }
 
     private var frontBar: Double? {
         guard let r = tpms.readings[.front], !r.isStale else { return nil }

@@ -62,6 +62,7 @@ struct RideWidgetView: View {
                         .font(.caption2)
                 }
             }
+            .widgetBackground(.clear)
         case .accessoryRectangular:
             // ロック画面(長方形)
             VStack(alignment: .leading, spacing: 2) {
@@ -73,6 +74,7 @@ struct RideWidgetView: View {
                 Text("\(entry.ridingMinutes) min")
                     .font(.caption2)
             }
+            .widgetBackground(.clear)
         default:
             // ホーム画面 (small / medium)
             VStack(spacing: 8) {
@@ -99,10 +101,23 @@ struct RideWidgetView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
             }
-            .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // .containerBackground は iOS 17+ のため使用しない(iOS 16互換)
-            .background(Color(.systemBackground))
+            .widgetBackground(Color(.systemBackground), legacyPadding: true)
+        }
+    }
+}
+
+extension View {
+    /// iOS 17+ は containerBackground 必須(無いと "Please adopt containerBackground API" 表示)。
+    /// iOS 17+ はシステムが余白を付けるため、自前の padding は iOS 16 のみ。
+    @ViewBuilder
+    func widgetBackground(_ color: Color, legacyPadding: Bool = false) -> some View {
+        if #available(iOS 17.0, *) {
+            containerBackground(color, for: .widget)
+        } else if legacyPadding {
+            padding().background(color)
+        } else {
+            background(color)
         }
     }
 }

@@ -15,15 +15,24 @@ final class RideManager: NSObject, ObservableObject {
     @Published var gpsStatus = "GPS待機中"
     @Published var phoneBatteryPercent: Int = 0
     @Published var headingDegrees: Double = 0     // コンパス方位(0=北)
+    /// 有効なGPS測位を受信中か。false の間は速度を "--" 表示にする
+    @Published var hasGPSFix = false
 
     private let manager = CLLocationManager()
     private var lastLocation: CLLocation?
-    private var lastUpdateDate: Date?
+    private var lastFixDate: Date?
+    private var fixWatchdog: Timer?
     private var lastWidgetSync = Date.distantPast
     private var smoothedSpeed: Double = 0
 
     /// この速度未満は停車扱い(km/h)— GPSノイズで距離が育つのを防ぐ
     private let movingThresholdKMH: Double = 3.0
+    /// この秒数、有効な測位が無ければ GPS ロスト扱い(速度が最後の値で固まるのを防ぐ)
+    private let fixTimeout: TimeInterval = 3
+    /// 測位間隔がこれを超えたら距離・時間を計上しない(バックグラウンド停止・長いロスト明け)
+    private let maxGapSeconds: TimeInterval = 10
+    /// 2点間の見かけ速度がこれを超えたら測位ジャンプとして捨てる(m/s ≒ 300km/h)
+    private let maxPlausibleMPS: Double = 300 / 3.6
 
     override init() {
         super.init()
@@ -54,15 +63,52 @@ final class RideManager: NSObject, ObservableObject {
         refreshBattery()
     }
 
+    @objc private func orientationChanged() {
+        updateHeadingOrientation()
+    }
+
     func start() {
         manager.requestWhenInUseAuthorization()
         manager.pausesLocationUpdatesAutomatically = false
+        // バックグラウンド(ホームへ戻る等)でも計測を継続。Info.plist の UIBackgroundModes=location が前提
+        manager.allowsBackgroundLocationUpdates = true
+        manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
         if CLLocationManager.headingAvailable() {
+            // 方位は端末の向き基準で返るため、横マウント時は向きを伝えないと90°ずれる
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(orientationChanged),
+                name: UIDevice.orientationDidChangeNotification, object: nil
+            )
+            updateHeadingOrientation()
             manager.startUpdatingHeading()
+        }
+        if fixWatchdog == nil {
+            fixWatchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.checkFixTimeout() }
+            }
         }
         // 走行中の画面消灯を防止(バイク用ダッシュボードの必須設定)
         UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    /// 縦/横左/横右のときだけ反映(上下逆・水平置き・不明は直前の向きを維持)
+    private func updateHeadingOrientation() {
+        let o = UIDevice.current.orientation
+        guard o == .portrait || o == .landscapeLeft || o == .landscapeRight,
+              let cl = CLDeviceOrientation(rawValue: Int32(o.rawValue)) else { return }
+        manager.headingOrientation = cl
+    }
+
+    /// 有効な測位が途絶えたら速度を落とし、表示を "--" にする
+    private func checkFixTimeout() {
+        guard hasGPSFix, let last = lastFixDate,
+              Date().timeIntervalSince(last) > fixTimeout else { return }
+        hasGPSFix = false
+        smoothedSpeed = 0
+        speedKMH = 0
+        gpsStatus = "GPSロスト"
     }
 
     func resetTrip() {
@@ -147,6 +193,8 @@ extension RideManager: CLLocationManagerDelegate {
               location.horizontalAccuracy < 50 else { return }
 
         gpsStatus = "GPS ✅ (±\(Int(location.horizontalAccuracy))m)"
+        hasGPSFix = true
+        lastFixDate = Date()
         altitudeM = location.altitude
 
         // 速度: 負値(無効)は0扱い、軽くスムージングして針の暴れを抑える
@@ -155,21 +203,18 @@ extension RideManager: CLLocationManagerDelegate {
         speedKMH = smoothedSpeed < 1 ? 0 : smoothedSpeed
         if speedKMH > maxSpeedKMH { maxSpeedKMH = speedKMH }
 
-        let now = Date()
-        if let last = lastLocation, let lastDate = lastUpdateDate {
-            let isMoving = speedKMH >= movingThresholdKMH
-            if isMoving {
-                let delta = location.distance(from: last)
-                // 1回の更新で異常な距離ジャンプは無視(トンネル明け等)
-                if delta < 200 {
-                    tripMeters += delta
-                    totalMeters += delta
-                }
-                ridingSeconds += now.timeIntervalSince(lastDate)
+        if let last = lastLocation, speedKMH >= movingThresholdKMH {
+            // 測位時刻ベースで間隔を測る。空白が長すぎる(バックグラウンド停止・長いロスト明け)
+            // か、見かけ速度があり得ない(測位ジャンプ)場合は距離・時間とも計上しない
+            let dt = location.timestamp.timeIntervalSince(last.timestamp)
+            let delta = location.distance(from: last)
+            if dt > 0, dt <= maxGapSeconds, delta / dt <= maxPlausibleMPS {
+                tripMeters += delta
+                totalMeters += delta
+                ridingSeconds += dt
             }
         }
         lastLocation = location
-        lastUpdateDate = now
 
         refreshBattery()
         persist()
