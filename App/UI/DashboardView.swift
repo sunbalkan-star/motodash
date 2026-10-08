@@ -18,7 +18,17 @@ struct DashboardView: View {
         GeometryReader { geo in
             let isPortrait = geo.size.height >= geo.size.width
             Group {
-                if isPortrait { portraitLayout } else { landscapeLayout }
+                if isPortrait {
+                    portraitLayout
+                } else {
+                    // 横画面はセーフエリアを無視し、余白を画面端から測る(ノッチ側 46pt / 反対側 18pt)。
+                    // ノッチが左右どちらにあるかは端末の向きで変わるため、インセットの大きい側をノッチ側とみなす
+                    let notchOnLeading = geo.safeAreaInsets.leading >= geo.safeAreaInsets.trailing
+                    landscapeLayout(leading: notchOnLeading ? 46 : 18,
+                                    trailing: notchOnLeading ? 18 : 46)
+                        .ignoresSafeArea()
+                        .persistentSystemOverlays(.hidden)   // ホームインジケータを自動で隠す
+                }
             }
         }
         .background(Palette.bg.ignoresSafeArea())
@@ -39,18 +49,18 @@ struct DashboardView: View {
 
     /// 縦方向の内訳(812×375 キャンバス): ステータスバー 55 + ゲージ 56 + ヒーロー行(上6 + 速度110pt 行高≒131)
     /// + ストリップ(上22 + 80 + 下10) + 下余白 14 = 374pt。
-    /// ※ iOS セーフエリア(横画面の下 約21pt)を差し引く実機では、速度数字は minimumScaleFactor で縮小される
-    private var landscapeLayout: some View {
+    /// セーフエリアは無視する(画面全体 = キャンバス)ので、実機でもこの寸法どおりに収まる。
+    private func landscapeLayout(leading: CGFloat, trailing: CGFloat) -> some View {
         VStack(spacing: 0) {
             statusBar(time: dateTimeString(), compassSize: 20, timeSize: 24)
-                .padding(EdgeInsets(top: 11, leading: 46, bottom: 6, trailing: 18))
+                .padding(EdgeInsets(top: 11, leading: leading, bottom: 6, trailing: trailing))
 
             GaugeBar(speedKMH: ride.speedKMH, maxSpeedKMH: ride.maxSpeedKMH,
                      barHeight: 30, cornerRadius: 8, labelSize: 15, showMaxPill: true,
                      onResetMax: { ride.resetMaxSpeed() })
                 .padding(.top, 2)
-                .padding(.leading, 46)
-                .padding(.trailing, 18)
+                .padding(.leading, leading)
+                .padding(.trailing, trailing)
 
             VStack(spacing: 0) {
                 // ヒーロー速度(右揃え) + TPMS 2枚: 上詰め固定
@@ -107,8 +117,8 @@ struct DashboardView: View {
                 .padding(.bottom, 10)
             }
             .frame(maxHeight: .infinity)
-            .padding(.leading, 46)
-            .padding(.trailing, 18)
+            .padding(.leading, leading)
+            .padding(.trailing, trailing)
             .padding(.bottom, 14)
         }
     }
