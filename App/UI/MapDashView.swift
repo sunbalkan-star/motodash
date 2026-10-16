@@ -23,6 +23,8 @@ struct MapDashView: View {
     @State private var showNavSheet = false
     @State private var showPinDialog = false
     @State private var now = Date()
+    /// HUD 各要素の画面上の枠(地図のピンをこの下に隠すため)
+    @State private var hudRects: [CGRect] = []
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     /// 自車位置の画面内高さ(上からの割合)。前方を広く見せるため中央より下に置く
@@ -64,6 +66,7 @@ struct MapDashView: View {
                             waypoints: nav.waypoints,
                             waypointsVersion: nav.waypointsVersion,
                             destination: nav.destination,
+                            occludedRects: hudRects,
                             onLongPress: { coord in
                                 nav.setDestination(name: "地図で指定", coordinate: coord)
                             })
@@ -91,6 +94,8 @@ struct MapDashView: View {
                     .padding(insets)
                     .frame(width: w, height: h)
             }
+            .coordinateSpace(name: HUDFrameKey.space)
+            .onPreferenceChange(HUDFrameKey.self) { hudRects = $0 }
             .frame(width: w, height: h)
             .clipped()
             .ignoresSafeArea()
@@ -130,17 +135,21 @@ struct MapDashView: View {
                 if nav.destination != nil {
                     navBox
                         .frame(maxWidth: isPortrait ? .infinity : 250, alignment: .leading)
+                        .reportHUDFrame()
                 }
                 Spacer(minLength: 0)
                 controls
+                    .reportHUDFrame()
             }
             .padding(.top, 8)
             Spacer(minLength: 0)
             HStack(alignment: .bottom, spacing: 8) {
                 speedBox
                     .frame(maxWidth: isPortrait ? .infinity : 168, alignment: .leading)
+                    .reportHUDFrame()
                 if !isPortrait { Spacer(minLength: 0) }
                 tpmsBox
+                    .reportHUDFrame()
             }
         }
     }
@@ -158,6 +167,7 @@ struct MapDashView: View {
                     .background(Capsule().fill(Palette.bg.opacity(0.85)))
             }
             .fixedSize()
+            .reportHUDFrame()
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -172,6 +182,7 @@ struct MapDashView: View {
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(Capsule().fill(Palette.bg.opacity(0.85)))
+            .reportHUDFrame()
 
             Text(Self.clockFormatter.string(from: now))
                 .font(motoNumberFont(17, .bold))
@@ -181,6 +192,7 @@ struct MapDashView: View {
                 .padding(.horizontal, 10)
                 .frame(height: 30)
                 .background(Capsule().fill(Palette.bg.opacity(0.85)))
+                .reportHUDFrame()
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: 36)
@@ -428,6 +440,26 @@ enum SolarPosition {
     }
 }
 
+// MARK: - HUD の枠の収集(ピンの重なり判定用)
+
+/// HUD 要素の枠をマップ画面の座標系(= MKMapView の座標系。地図は画面左上に原点を合わせて置いている)で集める
+struct HUDFrameKey: PreferenceKey {
+    static let space = "mapScreen"
+    static let defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+extension View {
+    func reportHUDFrame() -> some View {
+        background(GeometryReader { g in
+            Color.clear.preference(key: HUDFrameKey.self,
+                                   value: [g.frame(in: .named(HUDFrameKey.space))])
+        })
+    }
+}
+
 // MARK: - 表示モード
 
 enum MapViewMode: String, CaseIterable {
@@ -483,6 +515,8 @@ struct MonoMapView: UIViewRepresentable {
     var waypoints: [Waypoint]
     var waypointsVersion: Int
     var destination: Destination?
+    /// HUD に覆われる画面上の枠。ここに掛かるピンは隠す
+    var occludedRects: [CGRect]
     var onLongPress: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -519,6 +553,10 @@ struct MonoMapView: UIViewRepresentable {
         c.syncRoute(route, version: routeVersion, on: map)
         c.syncGPX(gpxRoute, version: gpxVersion, on: map)
         c.syncPins(waypoints, version: waypointsVersion, destination: destination, on: map)
+        if c.occludedRects != occludedRects {
+            c.occludedRects = occludedRects
+            c.updatePinVisibility(on: map)
+        }
 
         guard let location else { return }
         c.appendTrail(location.coordinate, to: map)
@@ -575,6 +613,7 @@ struct MonoMapView: UIViewRepresentable {
         var realistic = false
         var hasCamera = false
         var onLongPress: ((CLLocationCoordinate2D) -> Void)?
+        var occludedRects: [CGRect] = []
 
         /// 走行軌跡(この画面を開いている間のみ・10m 間引き・最大 5000 点)
         private var trail: [CLLocationCoordinate2D] = []
@@ -666,6 +705,29 @@ struct MonoMapView: UIViewRepresentable {
                 r.lineWidth = 4
             }
             return r
+        }
+
+        /// HUD(ボタン・案内・速度・TPMS・上部ピル)に掛かるピンを隠す。少しでも重なれば隠し、外れたら戻す
+        func updatePinVisibility(on map: MKMapView) {
+            for pin in pins {
+                guard let view = map.view(for: pin) else { continue }
+                // 注釈ビューは内部のコンテナに載るため、地図の座標系へ変換してから比べる
+                let frame = view.convert(view.bounds, to: map)
+                let hidden = occludedRects.contains { $0.insetBy(dx: -4, dy: -4).intersects(frame) }
+                let alpha: CGFloat = hidden ? 0 : 1
+                if view.alpha != alpha {
+                    UIView.animate(withDuration: 0.15) { view.alpha = alpha }
+                }
+            }
+        }
+
+        /// カメラ追従のアニメーション中も呼ばれるため、ピンが HUD の下へ流れ込んだ時点で隠せる
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            updatePinVisibility(on: mapView)
+        }
+
+        func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            updatePinVisibility(on: mapView)
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
