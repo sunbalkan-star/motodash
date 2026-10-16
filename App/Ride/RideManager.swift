@@ -20,6 +20,8 @@ final class RideManager: NSObject, ObservableObject {
     @Published var headingDegrees: Double = 0     // コンパス方位(0=北)
     /// 有効なGPS測位を受信中か。false の間は速度を "--" 表示にする
     @Published var hasGPSFix = false
+    /// 最新の有効な測位(マップ画面のカメラ追従用)。ロスト中は最後の位置を保持
+    @Published private(set) var location: CLLocation?
 
     private let manager = CLLocationManager()
     private let altimeter = CMAltimeter()
@@ -240,6 +242,7 @@ extension RideManager: CLLocationManagerDelegate {
         gpsStatus = "GPS ✅ (±\(Int(location.horizontalAccuracy))m)"
         hasGPSFix = true
         lastFixDate = Date()
+        self.location = location
         if !usesBarometer { altitudeM = location.altitude }
 
         // 速度: 負値(無効)は0扱い、軽くスムージングして針の暴れを抑える

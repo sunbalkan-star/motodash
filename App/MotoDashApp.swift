@@ -8,7 +8,7 @@ struct MotoDashApp: App {
 
     var body: some Scene {
         WindowGroup {
-            DashboardView()
+            RootView()
                 .environmentObject(ride)
                 .environmentObject(tpms)
                 .onAppear {
