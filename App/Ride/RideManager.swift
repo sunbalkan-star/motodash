@@ -138,6 +138,12 @@ final class RideManager: NSObject, ObservableObject {
         persist(force: true)
     }
 
+    /// 進行方向: 走行中(8km/h 以上)は GPS コース(安定)、停車・低速中はコンパス。地図の向きと案内矢印に使う
+    var travelHeading: Double {
+        if let loc = location, loc.course >= 0, speedKMH >= 8 { return loc.course }
+        return headingDegrees
+    }
+
     /// 最高速のみリセット(ゲージのMAX表示を長押し)。次のGPS更新から再追従。
     func resetMaxSpeed() {
         maxSpeedKMH = 0

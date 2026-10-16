@@ -6,6 +6,9 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
+    @EnvironmentObject var nav: NavManager
+    /// 案内表示のタップでマップ画面へ切り替える(RootView と共有)
+    @AppStorage("ui.showMap") private var showMap = false
     @State private var showSniffer = false
     @State private var showRideLog = false
     /// TRIP カードの表示切替(タップで A/B)。次回起動時も維持
@@ -100,14 +103,21 @@ struct DashboardView: View {
 
     /// 縦方向の内訳(セーフエリア内。iPhone X で有効 734pt):
     ///   上 4 + ステータスバー 36 + 間 8 + ゲージ行 44(バー28 + 4 + 目盛12)
+    ///   + [案内中のみ: 間 9 + 案内カード 56]
     ///   + 速度 188pt 行高≒224 + KM/H 16 + カードエリア 307(TPMS 70 + 9 + 右列 70×3 + 9×2)
-    ///   = 639pt。残り ≒95pt を速度の上下 Spacer が等分する。左列 149 は右列 228 に下端揃え。
+    ///   = 639pt(案内中 704pt)。残り ≒95pt(案内中 ≒30pt)を速度の上下 Spacer が等分する。
+    ///   左列 149 は右列 228 に下端揃え。
     private var portraitLayout: some View {
         VStack(spacing: 0) {
             statusBar(.portrait)
             Spacer().frame(height: 8)
 
             gaugeRow(.portrait)
+
+            if nav.destination != nil {
+                navCard
+                    .padding(.top, 9)
+            }
 
             Spacer(minLength: 0)
             Text(speedText)
@@ -200,19 +210,20 @@ struct DashboardView: View {
                 .buttonStyle(.plain)
 
                 gpsPill(m)
+
+                // 横画面の案内中は中央を案内チップに譲り、方位は左へ(小さめ)
+                if showsNavChip(m) {
+                    compass(dirSize: 16, degSize: 12, gap: 3)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 方位(中央): "NE 042°" シアン
-            HStack(alignment: .firstTextBaseline, spacing: m.compassGap) {
-                Text(cardinal(ride.headingDegrees))
-                    .font(motoNumberFont(m.dirSize, .heavy))
-                Text(String(format: "%03d°", Int(ride.headingDegrees.rounded()) % 360))
-                    .font(motoNumberFont(m.degSize, .bold))
+            // 中央: 方位 "NE 042°" シアン / 横画面の案内中は案内チップ
+            if showsNavChip(m) {
+                navChip
+            } else {
+                compass(dirSize: m.dirSize, degSize: m.degSize, gap: m.compassGap)
             }
-            .foregroundColor(Palette.cyan)
-            .lineLimit(1)
-            .fixedSize()
 
             // 日時(右): 横 = "10/08 THU" + "HH:MM" / 縦 = "HH:MM"
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -231,6 +242,83 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: 36)
+    }
+
+    private func compass(dirSize: CGFloat, degSize: CGFloat, gap: CGFloat) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: gap) {
+            Text(cardinal(ride.headingDegrees))
+                .font(motoNumberFont(dirSize, .heavy))
+            Text(String(format: "%03d°", Int(ride.headingDegrees.rounded()) % 360))
+                .font(motoNumberFont(degSize, .bold))
+        }
+        .foregroundColor(Palette.cyan)
+        .lineLimit(1)
+        .fixedSize()
+    }
+
+    // MARK: - 案内(マップ画面と同じ内容。タップでマップ画面へ)
+
+    private func showsNavChip(_ m: Metrics) -> Bool {
+        m.isLandscape && nav.destination != nil
+    }
+
+    /// 横画面ステータスバー中央の案内チップ(h36・最大 ≒282pt)。
+    /// 横幅: ステータスバー 748 のうち左右は各 ≦215(戻る44 + 8 + GPS LOST ≒85 + 8 + 方位 ≒70)なので中央に 318 まで使える
+    private var navChip: some View {
+        HStack(spacing: 8) {
+            NavIcon(screenUpHeading: ride.travelHeading, size: 20)
+                .frame(width: 24, height: 24)
+            Text(nav.primaryText)
+                .font(motoNumberFont(18, .heavy))
+                .foregroundColor(Palette.textHi)
+                .lineLimit(1)
+                .fixedSize()
+            Text(nav.secondaryText)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Palette.textMid)
+                .lineLimit(1)
+                .frame(maxWidth: 160, alignment: .leading)
+        }
+        // 左右の可変幅に引き伸ばされないよう内容幅で固定(案内文は 160pt で省略)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 12)
+        .frame(height: 36)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Palette.borderStrong, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture { openMap() }
+    }
+
+    /// 縦画面の案内カード(h56): アイコン 32 + 距離 22pt / 案内文 12pt + 右端に残り距離
+    private var navCard: some View {
+        HStack(spacing: 12) {
+            NavIcon(screenUpHeading: ride.travelHeading, size: 28)
+                .frame(width: 32, height: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(nav.primaryText)
+                    .font(motoNumberFont(22, .heavy))
+                    .foregroundColor(Palette.textHi)
+                    .lineLimit(1)
+                    .frame(height: 26)
+                Text(nav.secondaryText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Palette.textMid)
+                    .lineLimit(1)
+                    .frame(height: 15)
+            }
+            Spacer(minLength: 4)
+            unitLabel(nav.tertiaryText, size: 10,
+                      color: nav.tertiaryIsWarning ? Palette.amber : Palette.label)
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 56)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Palette.borderStrong, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture { openMap() }
+    }
+
+    private func openMap() {
+        withAnimation(.easeInOut(duration: 0.25)) { showMap = true }
     }
 
     /// GPS 状態ピル(受信中=ライム "GPS" / ロスト=アンバー "GPS LOST")

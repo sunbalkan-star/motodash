@@ -218,21 +218,21 @@ struct MapDashView: View {
 
     private var navBox: some View {
         HStack(spacing: 12) {
-            navIcon
+            NavIcon(screenUpHeading: northUp ? 0 : travelHeading)
                 .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 1) {
-                Text(navPrimaryText)
+                Text(nav.primaryText)
                     .font(motoNumberFont(26, .heavy))
                     .foregroundColor(Palette.textHi)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
                     .frame(height: 30)
-                Text(navSecondaryText)
+                Text(nav.secondaryText)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Palette.textHi)
                     .lineLimit(1)
                     .frame(height: 15)
-                label(navTertiaryText, color: nav.routeError != nil ? Palette.amber : Palette.label)
+                label(nav.tertiaryText, color: nav.tertiaryIsWarning ? Palette.amber : Palette.label)
                     .frame(height: 13)
             }
         }
@@ -243,45 +243,6 @@ struct MapDashView: View {
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(Palette.borderStrong, lineWidth: 1.5))
         .contentShape(Rectangle())
         .onTapGesture { showNavSheet = true }
-    }
-
-    /// ルートあり=次の操作アイコン / ルートなし=目的地方向の矢印(直線コンパス) / 到着=旗
-    @ViewBuilder
-    private var navIcon: some View {
-        if nav.arrived {
-            Image(systemName: "flag.checkered")
-                .font(.system(size: 30, weight: .bold))
-                .foregroundColor(Palette.lime)
-        } else if nav.route != nil {
-            Image(systemName: nav.nextManeuverSymbol)
-                .font(.system(size: 32, weight: .bold))
-                .foregroundColor(Palette.lime)
-        } else {
-            Image(systemName: "location.north.fill")
-                .font(.system(size: 30, weight: .bold))
-                .foregroundColor(Palette.lime)
-                .rotationEffect(.degrees(nav.bearingToDestination - (northUp ? 0 : travelHeading)))
-        }
-    }
-
-    private var navPrimaryText: String {
-        if nav.arrived { return "到着" }
-        if nav.route != nil, let d = nav.distanceToManeuver { return distanceText(d) }
-        return nav.distanceToDestination.map(distanceText) ?? "--"
-    }
-
-    private var navSecondaryText: String {
-        let name = nav.destination?.name ?? ""
-        if nav.arrived || nav.route == nil { return name }
-        return nav.nextInstruction ?? name
-    }
-
-    private var navTertiaryText: String {
-        if nav.arrived { return "TAP TO END" }
-        if nav.isRouting { return "ROUTING…" }
-        if let err = nav.routeError { return err }
-        if let r = nav.remainingRouteMeters { return "残り \(distanceText(r))" }
-        return "直線距離"
     }
 
     // MARK: - ボタン列(右上: ナビ / 地点保存 / 地図操作 or 現在地へ戻る)
@@ -376,12 +337,7 @@ struct MapDashView: View {
     }
 
     /// 進行方向: 走行中は GPS コース(安定)、停車・低速中はコンパス
-    private var travelHeading: Double {
-        if let loc = ride.location, loc.course >= 0, ride.speedKMH >= 8 {
-            return loc.course
-        }
-        return ride.headingDegrees
-    }
+    private var travelHeading: Double { ride.travelHeading }
 
     /// 速度連動ズーム(カメラから自車までの距離)。
     ///   2D: 0km/h=500m 〜 120km/h 以上=2400m / 3D: 斜めで前方が遠くまで見えるため 350m 〜 1550m
@@ -401,10 +357,6 @@ struct MapDashView: View {
         if alt < -6 { return 0.45 }
         if alt < 0 { return 0.25 }
         return 0
-    }
-
-    private func distanceText(_ m: Double) -> String {
-        m < 1000 ? "\(Int((m / 10).rounded()) * 10) m" : String(format: "%.1f km", m / 1000)
     }
 
     private func cardinal(_ deg: Double) -> String {
