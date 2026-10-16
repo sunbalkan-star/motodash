@@ -1,6 +1,6 @@
 # MotoDash — バイク用ダッシュボードアプリ (iOS 16 / iPhone X)
 
-GPS速度計 + TPMS(タイヤ空気圧)+ Trip計 + ウィジェット。
+GPS速度計 + TPMS(タイヤ空気圧)+ Trip計 + マップ・目的地案内 + ウィジェット。
 iPhone X (iOS 16.7.x) + 無料Apple ID サイドロード運用前提。
 
 ## 機能と状態
@@ -14,6 +14,9 @@ iPhone X (iOS 16.7.x) + 無料Apple ID サイドロード運用前提。
 | タイヤ空気圧・温度 | 🔌 センサー購入後 | `App/TPMS/`(下記の連動手順参照) |
 | 低圧アラート(ローカル通知) | 🔌 同上 | `TPMSManager.checkLowPressure` |
 | Trip距離ウィジェット | ✅ 即動作 | ホーム + ロック画面、走行中約60秒ごと更新 |
+| マップ画面(モノクロ・3D/H-UP/N-UP) | ✅ 即動作 | `App/UI/MapDashView.swift`(Apple MapKit) |
+| 目的地案内(右左折・残り距離・再検索) | ✅ 要通信 | `App/Nav/NavManager.swift`(MKDirections。圏外は直線コンパス案内) |
+| GPX ルート表示 / 保存地点(給油・休憩) | ✅ 即動作 | 同上 + `App/UI/NavSheet.swift` |
 
 ## TPMSセンサー購入後の連動手順
 
@@ -49,8 +52,13 @@ ios-template/
 │   ├── Ride/RideManager.swift    # GPS: 速度/高度/Trip/時間
 │   ├── TPMS/TPMSModels.swift     # 読み値モデル + パーサープロトコル + 実装例
 │   ├── TPMS/TPMSManager.swift    # BLEスキャン/割当/低圧通知
+│   ├── Nav/NavManager.swift      # 目的地案内・GPX ルート・保存地点
 │   └── UI/
+│       ├── RootView.swift        # ダッシュボード ⇄ マップ(左右スワイプ)
 │       ├── DashboardView.swift   # メイン画面(横向き・黒背景)
+│       ├── MapDashView.swift     # マップ画面(モノクロ MapKit + HUD)
+│       ├── NavSheet.swift        # 目的地検索・保存地点・GPX 読込
+│       ├── NavGlance.swift       # 案内アイコン・文言(マップ/ダッシュボード共通)
 │       └── SnifferView.swift     # BLEスニファー + センサー割当
 ├── Shared/SharedStore.swift      # App Group共有(Trip等)
 └── Widget/RideWidget.swift       # Trip距離ウィジェット
@@ -67,6 +75,12 @@ ios-template/
 
 - **Trip リセット**: 画面右下の Trip を長押し
 - **センサー設定**: タイヤパネルをタップ
+- **マップ切替**: ダッシュボードで左スワイプ → マップ、右スワイプで戻る
+- **地図の向き**: マップをタップで 3D(バードビュー)→ H-UP → N-UP
+- **目的地**: マップ右上の🔍で検索 / 保存地点から選択 / 停車中の操作モードで地図を長押し。
+  案内中はダッシュボードにも表示(タップでマップへ)
+- **地点保存**: マップ右上のピンで現在地を給油・休憩・地点として保存
+- **停車中の地図操作**: 3km/h 未満で出る移動ボタン → 拡大縮小・スクロール。5km/h 以上で自動で追従に戻る
 - **画面は自動消灯しない**(`isIdleTimerDisabled`)。バッテリー消費に注意、給電マウント推奨
 
 ## 実機運用の注意
