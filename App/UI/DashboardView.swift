@@ -288,27 +288,33 @@ struct DashboardView: View {
         .onTapGesture { openMap() }
     }
 
-    /// 縦画面の案内カード(h56): アイコン 32 + 距離 22pt / 案内文 12pt + 右端に残り距離
+    /// 縦画面の案内カード(h56): アイコン 32 + [距離 22pt …… 残り距離] / 案内文 12pt
     private var navCard: some View {
         HStack(spacing: 12) {
             NavIcon(screenUpHeading: ride.travelHeading, size: 28)
                 .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(nav.primaryText)
-                    .font(motoNumberFont(22, .heavy))
-                    .foregroundColor(Palette.textHi)
-                    .lineLimit(1)
-                    .frame(height: 26)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(nav.primaryText)
+                        .font(motoNumberFont(22, .heavy))
+                        .foregroundColor(Palette.textHi)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Spacer(minLength: 0)
+                    Text(nav.tertiaryText)
+                        .font(motoLabelFont(10, .semibold))
+                        .tracking(1)
+                        .foregroundColor(nav.tertiaryIsWarning ? Palette.amber : Palette.label)
+                        .lineLimit(1)
+                }
+                .frame(height: 26)
                 Text(nav.secondaryText)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(Palette.textMid)
                     .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .frame(height: 15)
             }
-            Spacer(minLength: 4)
-            unitLabel(nav.tertiaryText, size: 10,
-                      color: nav.tertiaryIsWarning ? Palette.amber : Palette.label)
-                .fixedSize()
         }
         .padding(.horizontal, 12)
         .frame(height: 56)

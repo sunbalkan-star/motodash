@@ -130,7 +130,7 @@ struct MapDashView: View {
 
     private func hud(_ isPortrait: Bool) -> some View {
         VStack(spacing: 0) {
-            topBar
+            topBar(isPortrait)
             HStack(alignment: .top, spacing: 8) {
                 if nav.destination != nil {
                     navBox
@@ -154,48 +154,77 @@ struct MapDashView: View {
         }
     }
 
-    private var topBar: some View {
-        HStack(spacing: 0) {
+    /// 上ピル列(h36)。横画面は方位を画面中央に固定(左右は等幅の可変枠)。
+    /// 縦画面は左ピル(GPS LOST + MODE で最大 ≒136pt)が中央固定だと方位ピルに重なるため、
+    /// 左ピル | 方位 | 時刻 を間に Spacer を挟んで並べる(343pt に対し合計 ≒300pt)
+    @ViewBuilder
+    private func topBar(_ isPortrait: Bool) -> some View {
+        if isPortrait {
             HStack(spacing: 6) {
-                gpsPill
-                Text(interactive ? "MOVE" : viewMode.label)
-                    .font(motoLabelFont(10, .semibold))
-                    .tracking(1.5)
-                    .foregroundColor(interactive ? Palette.lime : Palette.textMid)
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .background(Capsule().fill(Palette.bg.opacity(0.85)))
+                leftPills
+                Spacer(minLength: 0)
+                compassPill
+                Spacer(minLength: 0)
+                clockPill
             }
-            .fixedSize()
-            .reportHUDFrame()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(height: 36)
+        } else {
+            HStack(spacing: 0) {
+                leftPills
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                compassPill
+                clockPill
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .frame(height: 36)
+        }
+    }
 
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(cardinal(ride.headingDegrees))
-                    .font(motoNumberFont(20, .heavy))
-                Text(String(format: "%03d°", Int(ride.headingDegrees.rounded()) % 360))
-                    .font(motoNumberFont(14, .bold))
-            }
-            .foregroundColor(Palette.cyan)
+    /// GPS ピル + 表示モードピル("3D"/"H-UP"/"N-UP"、操作中は "MOVE" ライム)
+    private var leftPills: some View {
+        HStack(spacing: 6) {
+            gpsPill
+            Text(interactive ? "MOVE" : viewMode.label)
+                .font(motoLabelFont(9, .semibold))
+                .tracking(1.5)
+                .foregroundColor(interactive ? Palette.lime : Palette.textHi)
+                .padding(.horizontal, 10)
+                .frame(height: 24)
+                .background(Capsule().fill(Palette.bg.opacity(0.85)))
+                .overlay(Capsule().stroke(interactive ? Palette.lime : Palette.borderStrong, lineWidth: 1))
+        }
+        .fixedSize()
+        .reportHUDFrame()
+    }
+
+    private var compassPill: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(cardinal(ride.headingDegrees))
+                .font(motoNumberFont(20, .heavy))
+            Text(String(format: "%03d°", Int(ride.headingDegrees.rounded()) % 360))
+                .font(motoNumberFont(14, .bold))
+        }
+        .foregroundColor(Palette.cyan)
+        .lineLimit(1)
+        .fixedSize()
+        .padding(.horizontal, 12)
+        .frame(height: 30)
+        .background(Capsule().fill(Palette.bg.opacity(0.85)))
+        .overlay(Capsule().stroke(Palette.borderStrong, lineWidth: 1))
+        .reportHUDFrame()
+    }
+
+    private var clockPill: some View {
+        Text(Self.clockFormatter.string(from: now))
+            .font(motoNumberFont(17, .bold))
+            .foregroundColor(Palette.textHi)
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 12)
             .frame(height: 30)
             .background(Capsule().fill(Palette.bg.opacity(0.85)))
+            .overlay(Capsule().stroke(Palette.borderStrong, lineWidth: 1))
             .reportHUDFrame()
-
-            Text(Self.clockFormatter.string(from: now))
-                .font(motoNumberFont(17, .bold))
-                .foregroundColor(Palette.textHi)
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 10)
-                .frame(height: 30)
-                .background(Capsule().fill(Palette.bg.opacity(0.85)))
-                .reportHUDFrame()
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .frame(height: 36)
     }
 
     private var gpsPill: some View {
@@ -253,7 +282,7 @@ struct MapDashView: View {
             mapButton("mappin.and.ellipse") { showPinDialog = true }
                 .disabled(ride.location == nil)
             if interactive {
-                mapButton("location.fill", tint: Palette.lime) { interactive = false }
+                mapButton("location.fill", tint: Palette.lime, border: Palette.lime) { interactive = false }
             } else if ride.speedKMH < stoppedKMH {
                 mapButton("arrow.up.and.down.and.arrow.left.and.right") { interactive = true }
             }
@@ -261,6 +290,7 @@ struct MapDashView: View {
     }
 
     private func mapButton(_ symbol: String, tint: Color = Palette.textHi,
+                           border: Color = Palette.borderStrong,
                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
@@ -268,7 +298,7 @@ struct MapDashView: View {
                 .foregroundColor(tint)
                 .frame(width: 44, height: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Palette.bg.opacity(0.88)))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.borderStrong, lineWidth: 1.5))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(border, lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }
@@ -284,10 +314,10 @@ struct MapDashView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
                 .frame(height: 70)
-            label("KM/H", color: Palette.textMid)
+            label("KM/H", size: 11, color: Palette.textMid)
                 .frame(height: 14)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: boxHeight)
         .background(RoundedRectangle(cornerRadius: 16).fill(Palette.bg.opacity(0.88)))
@@ -309,7 +339,7 @@ struct MapDashView: View {
     private func tpmsRow(_ title: String, _ pos: WheelPosition) -> some View {
         let bar = freshReading(pos)?.pressureBar
         return HStack(alignment: .firstTextBaseline, spacing: 6) {
-            label(title, color: Palette.label)
+            label(title, size: 11, color: Palette.label)
                 .frame(width: 12, alignment: .leading)
             Text(bar.map { String(format: "%.1f", $0) } ?? "-.--")
                 .font(motoNumberFont(28, .heavy))
@@ -321,9 +351,9 @@ struct MapDashView: View {
         .frame(height: 36)
     }
 
-    private func label(_ text: String, color: Color) -> some View {
+    private func label(_ text: String, size: CGFloat = 10, color: Color) -> some View {
         Text(text)
-            .font(motoLabelFont(10, .semibold))
+            .font(motoLabelFont(size, .semibold))
             .tracking(1.5)
             .foregroundColor(color)
             .lineLimit(1)
@@ -437,15 +467,29 @@ enum MapViewMode: String, CaseIterable {
     }
 }
 
-// MARK: - 自車矢印(ライム・黒縁)
+// MARK: - 自車矢印(ライム・黒縁 2pt、36×36)
 
 struct VehicleArrow: View {
     var body: some View {
-        Image(systemName: "location.north.fill")
-            .font(.system(size: 30, weight: .bold))
-            .foregroundColor(Palette.lime)
-            .shadow(color: .black.opacity(0.9), radius: 3)
-            .frame(width: 36, height: 36)
+        ZStack {
+            ArrowShape().fill(Palette.lime)
+            ArrowShape().stroke(Color.black, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+        }
+        .frame(width: 36, height: 36)
+    }
+}
+
+/// 矢じり形(36×36 基準: 先端 18,3 / 右下 31,31 / 内側 18,24 / 左下 5,31)
+struct ArrowShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let sx = rect.width / 36, sy = rect.height / 36
+        var p = Path()
+        p.move(to: CGPoint(x: 18 * sx, y: 3 * sy))
+        p.addLine(to: CGPoint(x: 31 * sx, y: 31 * sy))
+        p.addLine(to: CGPoint(x: 18 * sx, y: 24 * sy))
+        p.addLine(to: CGPoint(x: 5 * sx, y: 31 * sy))
+        p.closeSubpath()
+        return p
     }
 }
 
