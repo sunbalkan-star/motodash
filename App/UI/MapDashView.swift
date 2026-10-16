@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 
 /// マップ画面(ダッシュボードと左右スワイプで切替)。Apple 純正 MapKit をモノクロ化して表示する。
-/// 自車は画面の 65% 高さに矢印固定、地図側が進行方向に回る(ヘディングアップ)。タップでノースアップ切替。
+/// 自車は画面の 65% 高さに矢印固定、地図側が進行方向に回る。タップで 3D(バードビュー)→ H-UP → N-UP を切替。
 /// 表示データは GPS(位置・速度・進行方向)/ 磁気(停車中の方位)/ TPMS のみ。
 ///
 /// 横画面(812×375)の縦内訳: 上 8 + ステータスバー 36 + 間 8 + 案内ボックス h76 / ボタン列 h148(44×3 + 8×2)
@@ -15,8 +15,9 @@ struct MapDashView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
     @EnvironmentObject var nav: NavManager
-    /// ノースアップ表示(タップで切替)。次回起動時も維持
-    @AppStorage("map.northUp") private var northUp = false
+    /// 表示モード(タップで 3D → H-UP → N-UP の順に切替)。次回起動時も維持
+    @AppStorage("map.viewMode") private var viewMode: MapViewMode = .bird3D
+    private var northUp: Bool { viewMode == .northUp }
     /// 停車中のみ入れる地図操作モード(拡大縮小・スクロール・長押しで目的地)。走り出すと自動解除
     @State private var interactive = false
     @State private var showNavSheet = false
@@ -50,6 +51,7 @@ struct MapDashView: View {
                 MonoMapView(location: ride.location,
                             heading: northUp ? 0 : travelHeading,
                             distance: cameraDistance,
+                            pitch: viewMode.pitch,
                             legalMargins: UIEdgeInsets(
                                 top: 0, left: insets.leading,
                                 bottom: h * (vehicleY * 2 - 1) + insets.bottom + boxHeight + 8,
@@ -76,8 +78,11 @@ struct MapDashView: View {
                     .allowsHitTesting(false)
 
                 if !interactive {
+                    // 3D 時は地面に寝かせる(地図と同じ角度で奥へ倒す)
                     VehicleArrow()
                         .rotationEffect(.degrees(northUp ? travelHeading : 0))
+                        .rotation3DEffect(.degrees(viewMode.pitch), axis: (x: 1, y: 0, z: 0),
+                                          perspective: 0.5)
                         .position(x: w / 2, y: h * vehicleY)
                         .allowsHitTesting(false)
                 }
@@ -90,7 +95,7 @@ struct MapDashView: View {
             .clipped()
             .ignoresSafeArea()
             .contentShape(Rectangle())
-            .onTapGesture { if !interactive { northUp.toggle() } }
+            .onTapGesture { if !interactive { viewMode = viewMode.next } }
             .persistentSystemOverlays(isPortrait ? .automatic : .hidden)
         }
         .background(Palette.bg.ignoresSafeArea())
@@ -144,7 +149,7 @@ struct MapDashView: View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
                 gpsPill
-                Text(interactive ? "MOVE" : (northUp ? "N-UP" : "H-UP"))
+                Text(interactive ? "MOVE" : viewMode.label)
                     .font(motoLabelFont(10, .semibold))
                     .tracking(1.5)
                     .foregroundColor(interactive ? Palette.lime : Palette.textMid)
@@ -366,9 +371,12 @@ struct MapDashView: View {
         return ride.headingDegrees
     }
 
-    /// 速度連動ズーム: 0km/h=500m 〜 120km/h 以上=2400m(カメラ高度)
+    /// 速度連動ズーム(カメラから自車までの距離)。
+    ///   2D: 0km/h=500m 〜 120km/h 以上=2400m / 3D: 斜めで前方が遠くまで見えるため 350m 〜 1550m
     private var cameraDistance: Double {
-        min(2400, 500 + ride.speedKMH * 16)
+        viewMode == .bird3D
+            ? min(1550, 350 + ride.speedKMH * 10)
+            : min(2400, 500 + ride.speedKMH * 16)
     }
 
     /// 太陽高度で地図を暗くする: 昼 0 / 薄明(0〜-6°)0.25 / 夜(-6°未満)0.45。位置が無ければ 18〜6時を夜とみなす
@@ -420,6 +428,31 @@ enum SolarPosition {
     }
 }
 
+// MARK: - 表示モード
+
+enum MapViewMode: String, CaseIterable {
+    /// バードビュー: 進行方向が上・斜め見下ろし・建物/地形の立体表示
+    case bird3D
+    case headingUp
+    case northUp
+
+    var label: String {
+        switch self {
+        case .bird3D: return "3D"
+        case .headingUp: return "H-UP"
+        case .northUp: return "N-UP"
+        }
+    }
+
+    /// カメラの傾き(度)。0 = 真上から
+    var pitch: Double { self == .bird3D ? 55 : 0 }
+
+    var next: MapViewMode {
+        let all = Self.allCases
+        return all[(all.firstIndex(of: self)! + 1) % all.count]
+    }
+}
+
 // MARK: - 自車矢印(ライム・黒縁)
 
 struct VehicleArrow: View {
@@ -438,6 +471,8 @@ struct MonoMapView: UIViewRepresentable {
     var location: CLLocation?
     var heading: Double
     var distance: Double
+    /// カメラの傾き(度)。0 より大きい時は建物・地形も立体表示にする
+    var pitch: Double
     var legalMargins: UIEdgeInsets
     /// true=停車中の操作モード(追従を止め、拡大縮小・スクロール・長押しを許可)
     var interactive: Bool
@@ -454,15 +489,14 @@ struct MonoMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
-        let config = MKStandardMapConfiguration(elevationStyle: .flat, emphasisStyle: .muted)
-        config.pointOfInterestFilter = .excludingAll
-        config.showsTraffic = false
-        map.preferredConfiguration = config
+        map.preferredConfiguration = Self.configuration(realistic: pitch > 0)
+        context.coordinator.realistic = pitch > 0
         map.overrideUserInterfaceStyle = .dark
         map.showsCompass = false
         map.showsScale = false
         map.showsUserLocation = false
-        map.isPitchEnabled = false
+        // false だとカメラの pitch 自体が無視される(常に真上から)ため有効にしておく
+        map.isPitchEnabled = true
         map.delegate = context.coordinator
         let press = UILongPressGestureRecognizer(target: context.coordinator,
                                                  action: #selector(Coordinator.handleLongPress(_:)))
@@ -477,6 +511,10 @@ struct MonoMapView: UIViewRepresentable {
         map.isUserInteractionEnabled = interactive
         map.showsUserLocation = interactive   // 操作モード中は自車矢印の代わりに青点(グレー)で現在地を示す
         if map.layoutMargins != legalMargins { map.layoutMargins = legalMargins }
+        if c.realistic != (pitch > 0) {
+            c.realistic = pitch > 0
+            map.preferredConfiguration = Self.configuration(realistic: c.realistic)
+        }
 
         c.syncRoute(route, version: routeVersion, on: map)
         c.syncGPX(gpxRoute, version: gpxVersion, on: map)
@@ -495,16 +533,27 @@ struct MonoMapView: UIViewRepresentable {
         } ?? true
         let turned = abs(angleDiff(heading, c.lastHeading)) >= 2
         let zoomed = abs(distance - c.lastDistance) >= 50
-        guard moved || turned || zoomed else { return }
+        let tilted = pitch != c.lastPitch
+        guard moved || turned || zoomed || tilted else { return }
 
         let first = !c.hasCamera
         c.hasCamera = true
         c.lastCenter = location.coordinate
         c.lastHeading = heading
         c.lastDistance = distance
+        c.lastPitch = pitch
         let camera = MKMapCamera(lookingAtCenter: location.coordinate,
-                                 fromDistance: distance, pitch: 0, heading: heading)
+                                 fromDistance: distance, pitch: pitch, heading: heading)
         map.setCamera(camera, animated: !first)
+    }
+
+    /// モノクロ用の地図設定。realistic=建物・地形の立体表示(対応地域のみ。非対応地域は平面のまま)
+    private static func configuration(realistic: Bool) -> MKStandardMapConfiguration {
+        let config = MKStandardMapConfiguration(elevationStyle: realistic ? .realistic : .flat,
+                                                emphasisStyle: .muted)
+        config.pointOfInterestFilter = .excludingAll
+        config.showsTraffic = false
+        return config
     }
 
     private func angleDiff(_ a: Double, _ b: Double) -> Double {
@@ -522,6 +571,8 @@ struct MonoMapView: UIViewRepresentable {
         var lastCenter: CLLocationCoordinate2D?
         var lastHeading: Double = 0
         var lastDistance: Double = 0
+        var lastPitch: Double = -1
+        var realistic = false
         var hasCamera = false
         var onLongPress: ((CLLocationCoordinate2D) -> Void)?
 
