@@ -734,6 +734,29 @@ struct MonoMapView: UIViewRepresentable {
         return d > 180 ? d - 360 : (d < -180 ? d + 360 : d)
     }
 
+    /// 縁取り付きの線: 太い縁の色で描いてから、その上に本来の線(strokeColor / lineWidth)を重ねる
+    final class CasedPolylineRenderer: MKPolylineRenderer {
+        var casingColor: UIColor = .gray
+        /// 縁を含めた全幅(pt)
+        var casingWidth: CGFloat = 9
+
+        override func draw(_ mapRect: MKMapRect, zoomScale: MKZoomScale, in context: CGContext) {
+            if path == nil { createPath() }
+            if let path {
+                context.saveGState()
+                context.addPath(path)
+                context.setStrokeColor(casingColor.cgColor)
+                // 描画は地図座標なので、画面 pt の太さは zoomScale で割って合わせる
+                context.setLineWidth(casingWidth / zoomScale)
+                context.setLineCap(.round)
+                context.setLineJoin(.round)
+                context.strokePath()
+                context.restoreGState()
+            }
+            super.draw(mapRect, zoomScale: zoomScale, in: context)
+        }
+    }
+
     /// 地点・目的地のピン
     final class PinAnnotation: MKPointAnnotation {
         var symbol = "mappin"
@@ -831,16 +854,23 @@ struct MonoMapView: UIViewRepresentable {
         }
 
         /// 線種(地図はモノクロ化されるため明度と線幅・破線で区別)
-        ///   案内ルート = 暗い地図では白・明るい地図では濃いグレー 7pt / GPX = 同 60% 破線 4pt / 走行軌跡 = グレー 4pt
+        ///   案内ルート = 暗い地図では白 7pt・明るい地図では白 5pt + 濃いグレーの縁(全幅 9pt)
+        ///   GPX = 同系 60% 破線 4pt / 走行軌跡 = グレー 4pt
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
-            let r = MKPolylineRenderer(polyline: line)
+            let isRoute = line === routeLine
+            let r = isRoute && Palette.isLight ? CasedPolylineRenderer(polyline: line) : MKPolylineRenderer(polyline: line)
             r.lineCap = .round
             r.lineJoin = .round
             // 明るい地図は線ごと「明るさ -0.26 → コントラスト 2.5」で濃くされる。黒だと真っ黒になるので
             // 明度 0.68 で描き、画面上で ≒0.3 の濃いグレーに見えるようにする
             let ink = Palette.isLight ? UIColor(white: 0.68, alpha: 1) : UIColor(Palette.textHi)
-            if line === routeLine {
+            if isRoute, let cased = r as? CasedPolylineRenderer {
+                cased.casingColor = ink
+                cased.casingWidth = 9
+                r.strokeColor = .white
+                r.lineWidth = 5
+            } else if isRoute {
                 r.strokeColor = ink
                 r.lineWidth = 7
             } else if line === gpxLine {
