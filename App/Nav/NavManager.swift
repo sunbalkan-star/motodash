@@ -59,6 +59,8 @@ final class NavManager: ObservableObject {
     @Published private(set) var stepIndex = 0
     @Published private(set) var distanceToManeuver: Double?
     @Published private(set) var remainingRouteMeters: Double?
+    /// 残りのルート(現在地の最近傍から終点まで・間引いて最大 ≒200 点)。地図の縮尺合わせ用
+    @Published private(set) var remainingRoute: [CLLocationCoordinate2D] = []
     @Published private(set) var distanceToDestination: Double?
     @Published private(set) var bearingToDestination: Double = 0
     @Published private(set) var arrived = false
@@ -211,6 +213,11 @@ final class NavManager: ObservableObject {
             distanceToManeuver = toEnd
             remainingRouteMeters = toEnd + steps.dropFirst(stepIndex + 1).reduce(0) { $0 + $1.distance }
         }
+
+        let every = max(1, (routePoints.count - bestSeg) / 200)
+        var rest = Swift.stride(from: bestSeg, to: routePoints.count, by: every).map { routePoints[$0].coordinate }
+        if let last = routePoints.last?.coordinate { rest.append(last) }
+        remainingRoute = rest
     }
 
     private func requestRoute(from loc: CLLocation) {
@@ -270,6 +277,7 @@ final class NavManager: ObservableObject {
         stepIndex = 0
         distanceToManeuver = nil
         remainingRouteMeters = nil
+        remainingRoute = []
         isRouting = false
         offRouteCount = 0
     }

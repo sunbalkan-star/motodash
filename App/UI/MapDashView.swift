@@ -38,6 +38,8 @@ struct MapDashView: View {
     @State private var pinchBase: Double?
     /// ピンチ中(と終了直後)はスワイプ切替を止める
     @State private var pinchLock = false
+    /// 地図の実測縮尺: 1pt あたりの地上距離(m) ÷ カメラ距離(m)。地図側で測って返してもらう(初期値は目安)
+    @State private var mapScaleK: Double = 0.0009
     private let zoomRange: ClosedRange<Double> = 0.25...4
     private let zoomStep: Double = 1.5
     private let boxHeight: CGFloat = 104
@@ -64,7 +66,7 @@ struct MapDashView: View {
                 // はみ出した下側は画面外(Apple の地図ロゴ・Legal もそちらに出るので画面には映らない)
                 MonoMapView(location: ride.location,
                             heading: northUp ? 0 : travelHeading,
-                            distance: cameraDistance,
+                            distance: cameraDistance(w: w, h: h, vy: vy, isPortrait: isPortrait),
                             pitch: viewMode.pitch,
                             interactive: interactive,
                             route: nav.route?.polyline,
@@ -77,6 +79,9 @@ struct MapDashView: View {
                             occludedRects: hudRects,
                             onLongPress: { coord in
                                 nav.setDestination(name: "地図で指定", coordinate: coord)
+                            },
+                            onScale: { k in
+                                if abs(k / mapScaleK - 1) > 0.02 { mapScaleK = k }
                             })
                     .saturation(0)
                     // 明るい地図は全体が薄く道路の縁取りが見えにくい。コントラストだけ上げると中間より明るい
@@ -440,14 +445,48 @@ struct MapDashView: View {
     /// 進行方向: 走行中は GPS コース(安定)、停車・低速中はコンパス
     private var travelHeading: Double { ride.travelHeading }
 
-    /// 速度連動ズーム(カメラから自車までの距離)。
-    ///   2D: 0km/h=500m 〜 120km/h 以上=2400m / 3D: 斜めで前方が遠くまで見えるため 350m 〜 1550m
-    ///   これにユーザーの拡大縮小倍率(0.25〜4)を掛け、150m〜12km に収める
-    private var cameraDistance: Double {
-        let base = viewMode == .bird3D
+    /// カメラから自車までの距離(= 縮尺)。
+    ///   通常: 速度連動。2D: 0km/h=500m 〜 120km/h 以上=2400m / 3D: 斜めで前方が遠くまで見えるため 350m 〜 1550m
+    ///   案内中: 残りのルート全体が画面の空きに収まる縮尺。曲がり角・分岐が近づいたら通常の 0.7 倍まで寄る
+    ///   これにユーザーの拡大縮小倍率(0.25〜4)を掛け、150m〜300km に収める
+    private func cameraDistance(w: CGFloat, h: CGFloat, vy: CGFloat, isPortrait: Bool) -> Double {
+        let speedBase = viewMode == .bird3D
             ? min(1550, 350 + ride.speedKMH * 10)
             : min(2400, 500 + ride.speedKMH * 16)
-        return min(12_000, max(150, base * zoomScale))
+        var base = speedBase
+        if let fit = routeFitDistance(w: w, h: h, vy: vy, isPortrait: isPortrait) {
+            base = nearManeuver ? speedBase * 0.7 : max(fit, speedBase * 0.7)
+        }
+        return min(300_000, max(150, base * zoomScale))
+    }
+
+    /// 次の曲がり角・分岐(ステップの終端)が近いか。手前 250m か、15 秒で着く距離の長い方
+    private var nearManeuver: Bool {
+        guard nav.route != nil, !nav.arrived, let d = nav.distanceToManeuver else { return false }
+        return d < max(250, ride.speedKMH / 3.6 * 15)
+    }
+
+    /// 残りのルート(ルートが無ければ目的地)が自車の周りの空きに収まるカメラ距離。案内していなければ nil。
+    /// 空き = 上はステータスバー、下は下ボックス、左右は端 40pt を除いた範囲(地図の向きに合わせて回して判定)
+    private func routeFitDistance(w: CGFloat, h: CGFloat, vy: CGFloat, isPortrait: Bool) -> Double? {
+        guard nav.destination != nil, !nav.arrived, let loc = ride.location else { return nil }
+        let points = nav.remainingRoute.isEmpty
+            ? (nav.destination.map { [$0.coordinate] } ?? [])
+            : nav.remainingRoute
+        guard !points.isEmpty else { return nil }
+        let up = Double(h * vy) - (isPortrait ? 110 : 60)
+        let down = max(40, Double(h * (1 - vy)) - (isPortrait ? 150 : 130))
+        let side = Double(w / 2) - 40
+        let heading = northUp ? 0 : travelHeading
+        var metersPerPoint = 0.0
+        for c in points {
+            let d = loc.distance(from: CLLocation(latitude: c.latitude, longitude: c.longitude))
+            let rel = (Geo.bearing(from: loc.coordinate, to: c) - heading) * .pi / 180
+            let forward = d * cos(rel), right = d * sin(rel)
+            metersPerPoint = max(metersPerPoint, abs(right) / side,
+                                 forward >= 0 ? forward / up : -forward / down)
+        }
+        return metersPerPoint / mapScaleK
     }
 
     /// 太陽高度で地図を暗くする: 昼 0 / 薄明(0〜-6°)0.25 / 夜(-6°未満)0.45。位置が無ければ 18〜6時を夜とみなす
@@ -518,7 +557,7 @@ extension View {
 // MARK: - 表示モード
 
 enum MapViewMode: String, CaseIterable {
-    /// バードビュー: 進行方向が上・斜め見下ろし・建物/地形の立体表示
+    /// バードビュー: 進行方向が上・斜め見下ろし(建物は立体にしない)
     case bird3D
     case headingUp
     case northUp
@@ -572,7 +611,7 @@ struct MonoMapView: UIViewRepresentable {
     var location: CLLocation?
     var heading: Double
     var distance: Double
-    /// カメラの傾き(度)。0 より大きい時は建物・地形も立体表示にする
+    /// カメラの傾き(度)
     var pitch: Double
     /// true=停車中の操作モード(追従を止め、拡大縮小・スクロール・長押しを許可)
     var interactive: Bool
@@ -586,13 +625,16 @@ struct MonoMapView: UIViewRepresentable {
     /// HUD に覆われる画面上の枠。ここに掛かるピンは隠す
     var occludedRects: [CGRect]
     var onLongPress: (CLLocationCoordinate2D) -> Void
+    /// 実測の縮尺(1pt あたりの地上距離 ÷ カメラ距離)を返す。案内中の縮尺合わせに使う
+    var onScale: (Double) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
-        map.preferredConfiguration = Self.configuration(realistic: pitch > 0)
-        context.coordinator.realistic = pitch > 0
+        map.preferredConfiguration = Self.configuration()
+        // 建物は道路の邪魔になるので立体表示しない(MapKit は建物の色を変えられないため、平面の薄い輪郭だけ残す)
+        map.showsBuildings = false
         // 明るい配色(SUNLIGHT)では地図も明るいスタイル。配色が変わると画面ごと作り直されるので作成時だけでよい
         map.overrideUserInterfaceStyle = Palette.isLight ? .light : .dark
         map.showsCompass = false
@@ -614,13 +656,10 @@ struct MonoMapView: UIViewRepresentable {
     func updateUIView(_ map: MKMapView, context: Context) {
         let c = context.coordinator
         c.onLongPress = onLongPress
+        c.onScale = onScale
         // 走行中はタッチを SwiftUI 側(スワイプ切替・タップでノースアップ)へ通す
         map.isUserInteractionEnabled = interactive
         map.showsUserLocation = interactive   // 操作モード中は自車矢印の代わりに青点(グレー)で現在地を示す
-        if c.realistic != (pitch > 0) {
-            c.realistic = pitch > 0
-            map.preferredConfiguration = Self.configuration(realistic: c.realistic)
-        }
 
         c.syncRoute(route, version: routeVersion, on: map)
         c.syncGPX(gpxRoute, version: gpxVersion, on: map)
@@ -657,10 +696,10 @@ struct MonoMapView: UIViewRepresentable {
         map.setCamera(camera, animated: !first)
     }
 
-    /// モノクロ用の地図設定。realistic=建物・地形の立体表示(対応地域のみ。非対応地域は平面のまま)。
+    /// モノクロ用の地図設定。3D(傾き)でも地面は平面のまま(realistic だと建物が立体で描かれ道路を隠すため)。
     /// 明るい配色では muted だと道路が背景に溶けるので標準の強調にする
-    private static func configuration(realistic: Bool) -> MKStandardMapConfiguration {
-        let config = MKStandardMapConfiguration(elevationStyle: realistic ? .realistic : .flat,
+    private static func configuration() -> MKStandardMapConfiguration {
+        let config = MKStandardMapConfiguration(elevationStyle: .flat,
                                                 emphasisStyle: Palette.isLight ? .default : .muted)
         config.pointOfInterestFilter = .excludingAll
         config.showsTraffic = false
@@ -683,9 +722,9 @@ struct MonoMapView: UIViewRepresentable {
         var lastHeading: Double = 0
         var lastDistance: Double = 0
         var lastPitch: Double = -1
-        var realistic = false
         var hasCamera = false
         var onLongPress: ((CLLocationCoordinate2D) -> Void)?
+        var onScale: ((Double) -> Void)?
         var occludedRects: [CGRect] = []
 
         /// 走行軌跡(この画面を開いている間のみ・10m 間引き・最大 5000 点)
@@ -798,6 +837,21 @@ struct MonoMapView: UIViewRepresentable {
         /// カメラ追従のアニメーション中も呼ばれるため、ピンが HUD の下へ流れ込んだ時点で隠せる
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
             updatePinVisibility(on: mapView)
+        }
+
+        /// 動き終わるたびに縮尺を実測する: 画面中央(= 自車)の左右 100pt の地上距離 ÷ カメラ距離
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let distance = mapView.camera.centerCoordinateDistance
+            guard distance > 0, mapView.bounds.width > 200 else { return }
+            let mid = CGPoint(x: mapView.bounds.midX, y: mapView.bounds.midY)
+            let a = mapView.convert(CGPoint(x: mid.x - 50, y: mid.y), toCoordinateFrom: mapView)
+            let b = mapView.convert(CGPoint(x: mid.x + 50, y: mid.y), toCoordinateFrom: mapView)
+            let meters = CLLocation(latitude: a.latitude, longitude: a.longitude)
+                .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
+            let k = meters / 100 / distance
+            guard k.isFinite, k > 0 else { return }
+            // SwiftUI の更新中に状態を書き換えないよう次の周回で返す
+            DispatchQueue.main.async { [weak self] in self?.onScale?(k) }
         }
 
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
