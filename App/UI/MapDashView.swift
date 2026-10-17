@@ -2,15 +2,17 @@ import SwiftUI
 import MapKit
 
 /// マップ画面(ダッシュボードと左右スワイプで切替)。Apple 純正 MapKit をモノクロ化して表示する。
-/// 自車は画面の 65% 高さに矢印固定、地図側が進行方向に回る。タップで 3D(バードビュー)→ H-UP → N-UP を切替。
+/// 自車は前方を広く見せるため画面下寄り(横 78% / 縦 75%)に矢印固定、地図側が進行方向に回る。
+/// タップで 3D(バードビュー)→ H-UP → N-UP を切替。ピンチ / 左下の ＋− で拡大縮小(長押しで標準に戻す)。
 /// 表示データは GPS(位置・速度・進行方向)/ 磁気(停車中の方位)/ TPMS のみ。
 ///
-/// 横画面(812×375)の縦内訳: 上 8 + ステータスバー 36 + 間 8 + 案内ボックス h76 / ボタン列 h148(44×3 + 8×2)
-///   + 地図(可変) + 下ボックス 104 + 下 20。ボタン列下端 200 < 下ボックス上端 251。
-///   自車矢印 y≒244(h36 → 226〜262)。案内ボックスは左上(46〜296)、ボタン列は右上、下ボックスは左右の角なので
-///   矢印(x≒406)とどれも重ならない。
-/// 縦画面(375×812)の縦内訳: セーフエリア上 + 4 + ステータスバー 36 + 間 8 + 案内ボックス 76 / ボタン列 148
-///   + 地図(可変) + 下ボックス 104 + セーフエリア下 + 8。自車矢印 y≒528、ボタン列下端 ≒247、下ボックス上端 ≒666。
+/// 横画面(812×375)の縦内訳: 上 8 + ステータスバー 36 + 中段 207(間 8 + 191 + 間 8) + 下ボックス 104 + 下 20 = 375。
+///   中段 左=案内ボックス h76(上詰め)+ ズーム h88(下詰め、y 155〜243)、右=ボタン列 h148(停車中 44×3 + 8×2、y 52〜200)。
+///   自車矢印 y≒292(h36 → 274〜310)・x≒406。下ボックスは左右の角(速度 46〜214 / TPMS 644〜794)、
+///   ズームは x 46〜90 なので矢印とはどれも重ならない。
+/// 縦画面(375×812)の縦内訳: セーフエリア上 + 4 + ステータスバー 36 + 中段(可変、間 8 + … + 間 8) + 下ボックス 104
+///   + セーフエリア下 + 8。下ボックス上端 ≒666、ズーム ≒570〜658(x 16〜60)、自車矢印 y≒609(x≒187、591〜627)で
+///   速度ボックス(x 16〜201)の上端 666 より上に収まる。
 struct MapDashView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
@@ -27,8 +29,17 @@ struct MapDashView: View {
     @State private var hudRects: [CGRect] = []
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    /// 自車位置の画面内高さ(上からの割合)。前方を広く見せるため中央より下に置く
-    private let vehicleY: CGFloat = 0.65
+    /// 自車位置の画面内高さ(上からの割合)。前方を広く見せるため下寄りに置く。
+    /// 縦画面は自車が速度ボックス(x 16〜201)の真上に来るので、矢印下端がボックス上端 666 に掛からない 0.75 まで
+    private func vehicleY(_ isPortrait: Bool) -> CGFloat { isPortrait ? 0.75 : 0.78 }
+    /// 拡大縮小の倍率(カメラ距離に掛ける。小さいほど拡大)。次回起動時も維持
+    @AppStorage("map.zoomScale") private var zoomScale: Double = 1
+    /// ピンチ開始時の倍率
+    @State private var pinchBase: Double?
+    /// ピンチ中(と終了直後)はスワイプ切替を止める
+    @State private var pinchLock = false
+    private let zoomRange: ClosedRange<Double> = 0.25...4
+    private let zoomStep: Double = 1.5
     private let boxHeight: CGFloat = 104
     /// これ未満を停車とみなす(km/h)。操作モードはこれ以上で自動解除
     private let stoppedKMH: Double = 3
@@ -42,21 +53,23 @@ struct MapDashView: View {
             let w = geo.size.width + safe.leading + safe.trailing
             let h = geo.size.height + safe.top + safe.bottom
             let notchOnLeading = safe.leading >= safe.trailing
+            let vy = vehicleY(isPortrait)
             let insets = isPortrait
                 ? EdgeInsets(top: safe.top + 4, leading: 16, bottom: safe.bottom + 8, trailing: 16)
                 : EdgeInsets(top: 8, leading: notchOnLeading ? 46 : 18,
                              bottom: 20, trailing: notchOnLeading ? 18 : 46)
 
             ZStack(alignment: .topLeading) {
-                // 地図は高さを (vehicleY×2) 倍にして、カメラ中心 = 自車位置が vehicleY に来るようにする。
+                // 地図は高さを (vy×2) 倍にして、カメラ中心 = 自車位置が vy に来るようにする。
                 // はみ出した下側は画面外。Apple の法的表記は layoutMargins で下ボックスの上に出す
                 MonoMapView(location: ride.location,
                             heading: northUp ? 0 : travelHeading,
                             distance: cameraDistance,
                             pitch: viewMode.pitch,
                             legalMargins: UIEdgeInsets(
-                                top: 0, left: insets.leading,
-                                bottom: h * (vehicleY * 2 - 1) + insets.bottom + boxHeight + 8,
+                                // 左下のズームボタン(w44)の右に出す
+                                top: 0, left: insets.leading + 44 + 8,
+                                bottom: h * (vy * 2 - 1) + insets.bottom + boxHeight + 8,
                                 right: insets.trailing),
                             interactive: interactive,
                             route: nav.route?.polyline,
@@ -72,7 +85,7 @@ struct MapDashView: View {
                             })
                     .saturation(0)
                     .contrast(1.15)
-                    .frame(width: w, height: h * vehicleY * 2)
+                    .frame(width: w, height: h * vy * 2)
 
                 // 夜間ディム(地図のみ。HUD は暗くしない)
                 Color.black
@@ -86,7 +99,7 @@ struct MapDashView: View {
                         .rotationEffect(.degrees(northUp ? travelHeading : 0))
                         .rotation3DEffect(.degrees(viewMode.pitch), axis: (x: 1, y: 0, z: 0),
                                           perspective: 0.5)
-                        .position(x: w / 2, y: h * vehicleY)
+                        .position(x: w / 2, y: h * vy)
                         .allowsHitTesting(false)
                 }
 
@@ -103,12 +116,29 @@ struct MapDashView: View {
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture { if !interactive { viewMode = viewMode.next } }
+            // ピンチで拡大縮小(走行中も可。操作モード中は地図自身のピンチに任せる)
+            .simultaneousGesture(
+                MagnificationGesture()
+                    .onChanged { scale in
+                        guard !interactive, scale > 0 else { return }
+                        let base = pinchBase ?? zoomScale
+                        pinchBase = base
+                        pinchLock = true
+                        zoomScale = clampZoom(base / Double(scale))
+                    }
+                    .onEnded { _ in
+                        pinchBase = nil
+                        // 指を離した直後に画面側のスワイプ判定が走るので、少し遅れて解除する
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { pinchLock = false }
+                    }
+            )
             .persistentSystemOverlays(isPortrait ? .automatic : .hidden)
         }
         .background(Palette.bg.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .statusBarHidden(true)
-        .preference(key: SwipeLockKey.self, value: interactive)
+        // 操作モード中・ピンチ中は左右スワイプの画面切替を止める(2本指の移動で誤って切り替わらないように)
+        .preference(key: SwipeLockKey.self, value: interactive || pinchLock)
         .onReceive(ticker) { now = $0 }
         .onChange(of: ride.speedKMH) { kmh in
             if interactive, kmh >= exitInteractiveKMH { interactive = false }
@@ -133,18 +163,24 @@ struct MapDashView: View {
     private func hud(_ isPortrait: Bool) -> some View {
         VStack(spacing: 0) {
             topBar(isPortrait)
+            // 中段: 左列 = 案内ボックス(上詰め)+ ズーム(下詰め) / 右列 = ボタン列
             HStack(alignment: .top, spacing: 8) {
-                if nav.destination != nil {
-                    navBox
-                        .frame(maxWidth: isPortrait ? .infinity : 250, alignment: .leading)
+                VStack(alignment: .leading, spacing: 8) {
+                    if nav.destination != nil {
+                        navBox
+                            .reportHUDFrame()
+                    }
+                    Spacer(minLength: 0)
+                    zoomControl
                         .reportHUDFrame()
                 }
+                .frame(maxWidth: isPortrait ? .infinity : 250, maxHeight: .infinity, alignment: .leading)
                 Spacer(minLength: 0)
                 controls
                     .reportHUDFrame()
             }
-            .padding(.top, 8)
-            Spacer(minLength: 0)
+            .padding(.vertical, 8)
+            .frame(maxHeight: .infinity)
             HStack(alignment: .bottom, spacing: 8) {
                 speedBox
                     .frame(maxWidth: isPortrait ? .infinity : 168, alignment: .leading)
@@ -276,6 +312,40 @@ struct MapDashView: View {
         .onTapGesture { showNavSheet = true }
     }
 
+    // MARK: - ズーム(左下: ＋ / − を縦に連結した 44×88。長押しで標準倍率に戻す)
+
+    private var zoomControl: some View {
+        VStack(spacing: 0) {
+            zoomButton("plus", label: "拡大") { zoomScale = clampZoom(zoomScale / zoomStep) }
+                .disabled(zoomScale <= zoomRange.lowerBound)
+            Rectangle()
+                .fill(Palette.borderStrong)
+                .frame(width: 28, height: 1)
+            zoomButton("minus", label: "縮小") { zoomScale = clampZoom(zoomScale * zoomStep) }
+                .disabled(zoomScale >= zoomRange.upperBound)
+        }
+        .frame(width: 44, height: 88)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Palette.bg.opacity(0.88)))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Palette.borderStrong, lineWidth: 1.5))
+        .onLongPressGesture { zoomScale = 1 }
+    }
+
+    private func zoomButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(Palette.textHi)
+                .frame(width: 44, height: 43.5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func clampZoom(_ v: Double) -> Double {
+        min(max(v, zoomRange.lowerBound), zoomRange.upperBound)
+    }
+
     // MARK: - ボタン列(右上: ナビ / 地点保存 / 地図操作 or 現在地へ戻る)
 
     private var controls: some View {
@@ -373,10 +443,12 @@ struct MapDashView: View {
 
     /// 速度連動ズーム(カメラから自車までの距離)。
     ///   2D: 0km/h=500m 〜 120km/h 以上=2400m / 3D: 斜めで前方が遠くまで見えるため 350m 〜 1550m
+    ///   これにユーザーの拡大縮小倍率(0.25〜4)を掛け、150m〜12km に収める
     private var cameraDistance: Double {
-        viewMode == .bird3D
+        let base = viewMode == .bird3D
             ? min(1550, 350 + ride.speedKMH * 10)
             : min(2400, 500 + ride.speedKMH * 16)
+        return min(12_000, max(150, base * zoomScale))
     }
 
     /// 太陽高度で地図を暗くする: 昼 0 / 薄明(0〜-6°)0.25 / 夜(-6°未満)0.45。位置が無ければ 18〜6時を夜とみなす
@@ -568,7 +640,7 @@ struct MonoMapView: UIViewRepresentable {
             CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: location) >= 1
         } ?? true
         let turned = abs(angleDiff(heading, c.lastHeading)) >= 2
-        let zoomed = abs(distance - c.lastDistance) >= 50
+        let zoomed = c.lastDistance <= 0 || abs(distance / c.lastDistance - 1) >= 0.03
         let tilted = pitch != c.lastPitch
         guard moved || turned || zoomed || tilted else { return }
 
