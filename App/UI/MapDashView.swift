@@ -87,7 +87,8 @@ struct MapDashView: View {
                             onScale: { k in
                                 if abs(k / mapScaleK - 1) > 0.02 { mapScaleK = k }
                             })
-                    .saturation(0)
+                    // モノクロ化。ただし明るい配色ではルート線をオレンジで目立たせるため色を残す(地図は淡い色付きになる)
+                    .saturation(Palette.isLight ? 1 : 0)
                     // 明るい地図は全体が薄く道路の縁取りが見えにくい。コントラストだけ上げると中間より明るい
                     // 縁取り(薄いグレー)は白へ寄ってしまうので、先に全体を下げてから強める。
                     // 地色(≒0.95)はほぼ白のまま、縁取り(≒0.85)は ≒0.72 まで濃くなる
@@ -854,7 +855,7 @@ struct MonoMapView: UIViewRepresentable {
         }
 
         /// 線種(地図はモノクロ化されるため明度と線幅・破線で区別)
-        ///   案内ルート = 暗い地図では白 7pt・明るい地図では白 5pt + ほぼ黒の縁(全幅 11pt)
+        ///   案内ルート = 暗い地図では白 7pt・明るい地図ではオレンジ 7pt + ほぼ黒の縁(全幅 9pt)
         ///   GPX = 同系 60% 破線 4pt / 走行軌跡 = グレー 4pt
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
@@ -868,11 +869,12 @@ struct MonoMapView: UIViewRepresentable {
             // 明度 0.68 で描き、画面上で ≒0.3 の濃いグレーに見えるようにする
             let ink = Palette.isLight ? UIColor(white: 0.68, alpha: 1) : UIColor(Palette.textHi)
             if isRoute, let cased = r as? CasedPolylineRenderer {
-                // 縁は明度 0.62(補正後 ≒0.15 のほぼ黒)・全幅 11pt(片側 3pt)。0.68 / 9pt では目立たなかった
+                // オレンジ 7pt + ほぼ黒の縁(全幅 9pt)。補正(明るさ -0.26 → コントラスト 2.5)後に
+                // ≒(1.0, 0.45, 0.0) の鮮やかなオレンジになるよう逆算した色。縁は明度 0.62(補正後 ≒0.15)
                 cased.casingColor = UIColor(white: 0.62, alpha: 1)
-                cased.casingWidth = 11
-                r.strokeColor = .white
-                r.lineWidth = 5
+                cased.casingWidth = 9
+                r.strokeColor = UIColor(red: 0.96, green: 0.74, blue: 0.5, alpha: 1)
+                r.lineWidth = 7
             } else if isRoute {
                 r.strokeColor = ink
                 r.lineWidth = 7
