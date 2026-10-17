@@ -680,6 +680,8 @@ struct MonoMapView: UIViewRepresentable {
             c.buildings3D = buildings3D
             map.preferredConfiguration = Self.configuration(buildings3D: buildings3D)
             map.showsBuildings = buildings3D
+            // 設定を替えると線が建物より手前に描かれるようになるため、付け直して地面の層へ戻す
+            c.reattachOverlays(on: map)
         }
 
         c.syncRoute(route, version: routeVersion, on: map)
@@ -814,6 +816,14 @@ struct MonoMapView: UIViewRepresentable {
             map.addAnnotations(pins)
         }
 
+        /// ルート・GPX・軌跡の線を外して付け直す(地図設定の切替後に重なり順を戻すため)
+        func reattachOverlays(on map: MKMapView) {
+            let lines = map.overlays
+            guard !lines.isEmpty else { return }
+            map.removeOverlays(lines)
+            map.addOverlays(lines, level: .aboveRoads)
+        }
+
         @objc func handleLongPress(_ g: UILongPressGestureRecognizer) {
             guard g.state == .began, let map = g.view as? MKMapView else { return }
             let coord = map.convert(g.location(in: map), toCoordinateFrom: map)
@@ -821,13 +831,15 @@ struct MonoMapView: UIViewRepresentable {
         }
 
         /// 線種(地図はモノクロ化されるため明度と線幅・破線で区別)
-        ///   案内ルート = 文字色(暗い地図では白・明るい地図では黒)7pt / GPX = 同 60% 破線 4pt / 走行軌跡 = グレー 4pt
+        ///   案内ルート = 暗い地図では白・明るい地図では濃いグレー 7pt / GPX = 同 60% 破線 4pt / 走行軌跡 = グレー 4pt
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let r = MKPolylineRenderer(polyline: line)
             r.lineCap = .round
             r.lineJoin = .round
-            let ink = UIColor(Palette.textHi)
+            // 明るい地図は線ごと「明るさ -0.26 → コントラスト 2.5」で濃くされる。黒だと真っ黒になるので
+            // 明度 0.68 で描き、画面上で ≒0.3 の濃いグレーに見えるようにする
+            let ink = Palette.isLight ? UIColor(white: 0.68, alpha: 1) : UIColor(Palette.textHi)
             if line === routeLine {
                 r.strokeColor = ink
                 r.lineWidth = 7
