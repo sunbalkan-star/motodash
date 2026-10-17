@@ -79,8 +79,11 @@ struct MapDashView: View {
                                 nav.setDestination(name: "地図で指定", coordinate: coord)
                             })
                     .saturation(0)
-                    // 明るい地図は全体が薄く道路の縁取りが見えにくいため、コントラストを強めて縁を濃くする
-                    .contrast(Palette.isLight ? 1.45 : 1.15)
+                    // 明るい地図は全体が薄く道路の縁取りが見えにくい。コントラストだけ上げると中間より明るい
+                    // 縁取り(薄いグレー)は白へ寄ってしまうので、先に全体を下げてから強める。
+                    // 地色(≒0.95)はほぼ白のまま、縁取り(≒0.85)は ≒0.72 まで濃くなる
+                    .brightness(Palette.isLight ? -0.26 : 0)
+                    .contrast(Palette.isLight ? 2.5 : 1.15)
                     .frame(width: w, height: h * vy * 2)
 
                 // 夜間ディム(地図のみ。HUD は暗くしない)
