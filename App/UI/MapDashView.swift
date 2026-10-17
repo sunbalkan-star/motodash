@@ -40,6 +40,8 @@ struct MapDashView: View {
     @State private var pinchLock = false
     /// 地図の実測縮尺: 1pt あたりの地上距離(m) ÷ カメラ距離(m)。地図側で測って返してもらう(初期値は目安)
     @State private var mapScaleK: Double = 0.0009
+    /// 曲がり角・分岐の手前にいるか(拡大し、建物を平面にする)。境目で行き来しないよう出る時は 1.3 倍離れてから
+    @State private var nearManeuver = false
     private let zoomRange: ClosedRange<Double> = 0.25...4
     private let zoomStep: Double = 1.5
     private let boxHeight: CGFloat = 104
@@ -68,6 +70,8 @@ struct MapDashView: View {
                             heading: northUp ? 0 : travelHeading,
                             distance: cameraDistance(w: w, h: h, vy: vy, isPortrait: isPortrait),
                             pitch: viewMode.pitch,
+                            // 3D 時は建物も立体。ただし曲がり角の手前はルートが建物に隠れないよう平面にする
+                            buildings3D: viewMode == .bird3D && !nearManeuver,
                             interactive: interactive,
                             route: nav.route?.polyline,
                             routeVersion: nav.routeVersion,
@@ -143,7 +147,10 @@ struct MapDashView: View {
         .statusBarHidden(true)
         // 操作モード中・ピンチ中は左右スワイプの画面切替を止める(2本指の移動で誤って切り替わらないように)
         .preference(key: SwipeLockKey.self, value: interactive || pinchLock)
-        .onReceive(ticker) { now = $0 }
+        .onReceive(ticker) {
+            now = $0
+            updateNearManeuver()
+        }
         .onChange(of: ride.speedKMH) { kmh in
             if interactive, kmh >= exitInteractiveKMH { interactive = false }
         }
@@ -460,10 +467,16 @@ struct MapDashView: View {
         return min(300_000, max(150, base * zoomScale))
     }
 
-    /// 次の曲がり角・分岐(ステップの終端)が近いか。手前 250m か、15 秒で着く距離の長い方
-    private var nearManeuver: Bool {
-        guard nav.route != nil, !nav.arrived, let d = nav.distanceToManeuver else { return false }
-        return d < max(250, ride.speedKMH / 3.6 * 15)
+    /// 次の曲がり角・分岐(ステップの終端)の手前判定(1 秒ごと)。手前 250m か 15 秒で着く距離の長い方で入り、
+    /// その 1.3 倍より離れるか、曲がり終えて次のステップへ進んだら出る
+    private func updateNearManeuver() {
+        guard nav.route != nil, !nav.arrived, let d = nav.distanceToManeuver else {
+            if nearManeuver { nearManeuver = false }
+            return
+        }
+        let enter = max(250, ride.speedKMH / 3.6 * 15)
+        let next = nearManeuver ? d < enter * 1.3 : d < enter
+        if next != nearManeuver { nearManeuver = next }
     }
 
     /// 残りのルート(ルートが無ければ目的地)が自車の周りの空きに収まるカメラ距離。案内していなければ nil。
@@ -557,7 +570,7 @@ extension View {
 // MARK: - 表示モード
 
 enum MapViewMode: String, CaseIterable {
-    /// バードビュー: 進行方向が上・斜め見下ろし(建物は立体にしない)
+    /// バードビュー: 進行方向が上・斜め見下ろし・建物/地形の立体表示(曲がり角の手前だけ平面)
     case bird3D
     case headingUp
     case northUp
@@ -613,6 +626,8 @@ struct MonoMapView: UIViewRepresentable {
     var distance: Double
     /// カメラの傾き(度)
     var pitch: Double
+    /// 建物・地形を立体で描くか(false は平面。ルートが建物の陰に隠れない)
+    var buildings3D: Bool
     /// true=停車中の操作モード(追従を止め、拡大縮小・スクロール・長押しを許可)
     var interactive: Bool
     var route: MKPolyline?
@@ -632,9 +647,10 @@ struct MonoMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
-        map.preferredConfiguration = Self.configuration()
-        // 建物は道路の邪魔になるので立体表示しない(MapKit は建物の色を変えられないため、平面の薄い輪郭だけ残す)
-        map.showsBuildings = false
+        // 建物は 1 棟ずつは変えられない(色も不可)ため、地図全体で立体 / 平面を切り替える
+        map.preferredConfiguration = Self.configuration(buildings3D: buildings3D)
+        map.showsBuildings = buildings3D
+        context.coordinator.buildings3D = buildings3D
         // 明るい配色(SUNLIGHT)では地図も明るいスタイル。配色が変わると画面ごと作り直されるので作成時だけでよい
         map.overrideUserInterfaceStyle = Palette.isLight ? .light : .dark
         map.showsCompass = false
@@ -660,6 +676,11 @@ struct MonoMapView: UIViewRepresentable {
         // 走行中はタッチを SwiftUI 側(スワイプ切替・タップでノースアップ)へ通す
         map.isUserInteractionEnabled = interactive
         map.showsUserLocation = interactive   // 操作モード中は自車矢印の代わりに青点(グレー)で現在地を示す
+        if c.buildings3D != buildings3D {
+            c.buildings3D = buildings3D
+            map.preferredConfiguration = Self.configuration(buildings3D: buildings3D)
+            map.showsBuildings = buildings3D
+        }
 
         c.syncRoute(route, version: routeVersion, on: map)
         c.syncGPX(gpxRoute, version: gpxVersion, on: map)
@@ -696,10 +717,10 @@ struct MonoMapView: UIViewRepresentable {
         map.setCamera(camera, animated: !first)
     }
 
-    /// モノクロ用の地図設定。3D(傾き)でも地面は平面のまま(realistic だと建物が立体で描かれ道路を隠すため)。
+    /// モノクロ用の地図設定。buildings3D=建物・地形の立体表示(対応地域のみ。非対応地域は平面のまま)。
     /// 明るい配色では muted だと道路が背景に溶けるので標準の強調にする
-    private static func configuration() -> MKStandardMapConfiguration {
-        let config = MKStandardMapConfiguration(elevationStyle: .flat,
+    private static func configuration(buildings3D: Bool) -> MKStandardMapConfiguration {
+        let config = MKStandardMapConfiguration(elevationStyle: buildings3D ? .realistic : .flat,
                                                 emphasisStyle: Palette.isLight ? .default : .muted)
         config.pointOfInterestFilter = .excludingAll
         config.showsTraffic = false
@@ -723,6 +744,7 @@ struct MonoMapView: UIViewRepresentable {
         var lastDistance: Double = 0
         var lastPitch: Double = -1
         var hasCamera = false
+        var buildings3D = false
         var onLongPress: ((CLLocationCoordinate2D) -> Void)?
         var onScale: ((Double) -> Void)?
         var occludedRects: [CGRect] = []
