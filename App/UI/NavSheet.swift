@@ -38,7 +38,7 @@ struct NavSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Palette.colorScheme)
         .fileImporter(isPresented: $showImporter, allowedContentTypes: Self.gpxTypes) { result in
             if case .success(let url) = result { nav.loadGPX(url) }
         }

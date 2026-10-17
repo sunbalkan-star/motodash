@@ -130,7 +130,7 @@ struct MapDashView: View {
             .persistentSystemOverlays(isPortrait ? .automatic : .hidden)
         }
         .background(Palette.bg.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Palette.colorScheme)
         .statusBarHidden(true)
         // 操作モード中・ピンチ中は左右スワイプの画面切替を止める(2本指の移動で誤って切り替わらないように)
         .preference(key: SwipeLockKey.self, value: interactive || pinchLock)
@@ -542,7 +542,7 @@ struct VehicleArrow: View {
     var body: some View {
         ZStack {
             ArrowShape().fill(Palette.lime)
-            ArrowShape().stroke(Color.black, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
+            ArrowShape().stroke(Palette.bg, style: StrokeStyle(lineWidth: 2, lineJoin: .round))
         }
         .frame(width: 36, height: 36)
     }
@@ -589,7 +589,8 @@ struct MonoMapView: UIViewRepresentable {
         let map = MKMapView()
         map.preferredConfiguration = Self.configuration(realistic: pitch > 0)
         context.coordinator.realistic = pitch > 0
-        map.overrideUserInterfaceStyle = .dark
+        // 明るい配色(SUNLIGHT)では地図も明るいスタイル。配色が変わると画面ごと作り直されるので作成時だけでよい
+        map.overrideUserInterfaceStyle = Palette.isLight ? .light : .dark
         map.showsCompass = false
         map.showsScale = false
         map.showsUserLocation = false
@@ -754,17 +755,18 @@ struct MonoMapView: UIViewRepresentable {
         }
 
         /// 線種(地図はモノクロ化されるため明度と線幅・破線で区別)
-        ///   案内ルート = 白 7pt / GPX = 白 60% 破線 4pt / 走行軌跡 = グレー 4pt
+        ///   案内ルート = 文字色(暗い地図では白・明るい地図では黒)7pt / GPX = 同 60% 破線 4pt / 走行軌跡 = グレー 4pt
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let r = MKPolylineRenderer(polyline: line)
             r.lineCap = .round
             r.lineJoin = .round
+            let ink = UIColor(Palette.textHi)
             if line === routeLine {
-                r.strokeColor = .white
+                r.strokeColor = ink
                 r.lineWidth = 7
             } else if line === gpxLine {
-                r.strokeColor = UIColor.white.withAlphaComponent(0.6)
+                r.strokeColor = ink.withAlphaComponent(0.6)
                 r.lineWidth = 4
                 r.lineDashPattern = [2, 8]
             } else {

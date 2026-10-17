@@ -7,6 +7,13 @@ struct DashboardView: View {
     @EnvironmentObject var ride: RideManager
     @EnvironmentObject var tpms: TPMSManager
     @EnvironmentObject var nav: NavManager
+    /// 歯車ボタンで設定シートを開く(シートは RootView 側で出す)
+    var openSettings: () -> Void
+
+    // private な @State があると自動生成の init が private になるため明示する
+    init(openSettings: @escaping () -> Void = {}) {
+        self.openSettings = openSettings
+    }
     /// 案内表示のタップでマップ画面へ切り替える(RootView と共有)
     @AppStorage("ui.showMap") private var showMap = false
     @State private var showSniffer = false
@@ -35,7 +42,7 @@ struct DashboardView: View {
             }
         }
         .background(Palette.bg.ignoresSafeArea())
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Palette.colorScheme)
         .statusBarHidden(true)
         .sheet(isPresented: $showSniffer) {
             SnifferView()
@@ -194,7 +201,9 @@ struct DashboardView: View {
         var cardHeight: CGFloat { isLandscape ? 80 : 70 }
     }
 
-    // MARK: - ステータスバー(h36: 左=戻る+GPS / 中央=方位 / 右=日時)
+    // MARK: - ステータスバー(h36: 左=戻る+GPS / 中央=方位 / 右=日時+設定)
+    //   右側の幅: 横 ≒179(日付 73 + 8 + 時刻 46 + 8 + 設定 44)/ 縦 ≒96(時刻 46 + 6 + 設定 44)。
+    //   縦は中央の方位(≒68)を挟んで左右各 ≒133 なので、左(戻る 44 + 6 + GPS LOST ≒82)と共に収まる
 
     private func statusBar(_ m: Metrics) -> some View {
         HStack(spacing: 0) {
@@ -225,20 +234,31 @@ struct DashboardView: View {
                 compass(dirSize: m.dirSize, degSize: m.degSize, gap: m.compassGap)
             }
 
-            // 日時(右): 横 = "10/08 THU" + "HH:MM" / 縦 = "HH:MM"
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if m.isLandscape {
-                    Text(Self.dateFormatter.string(from: now).uppercased())
-                        .font(motoLabelFont(11, .semibold))
-                        .tracking(1.5)
-                        .foregroundColor(Palette.label)
+            // 日時(右): 横 = "10/08 THU" + "HH:MM" / 縦 = "HH:MM"。その右に設定
+            HStack(spacing: m.leftGap) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    if m.isLandscape {
+                        Text(Self.dateFormatter.string(from: now).uppercased())
+                            .font(motoLabelFont(11, .semibold))
+                            .tracking(1.5)
+                            .foregroundColor(Palette.label)
+                    }
+                    Text(Self.clockFormatter.string(from: now))
+                        .font(motoNumberFont(m.timeSize, .bold))
+                        .foregroundColor(Palette.textHi)
                 }
-                Text(Self.clockFormatter.string(from: now))
-                    .font(motoNumberFont(m.timeSize, .bold))
-                    .foregroundColor(Palette.textHi)
+                .lineLimit(1)
+                .fixedSize()
+
+                Button(action: openSettings) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundColor(Palette.textHi)
+                        .frame(width: 44, height: 36)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Palette.button))
+                }
+                .buttonStyle(.plain)
             }
-            .lineLimit(1)
-            .fixedSize()
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .frame(height: 36)
@@ -263,7 +283,8 @@ struct DashboardView: View {
     }
 
     /// 横画面ステータスバー中央の案内チップ(h36・最大 ≒282pt)。
-    /// 横幅: ステータスバー 748 のうち左右は各 ≦215(戻る44 + 8 + GPS LOST ≒85 + 8 + 方位 ≒70)なので中央に 318 まで使える
+    /// 横幅: ステータスバー 748 のうち左は ≦215(戻る44 + 8 + GPS LOST ≒85 + 8 + 方位 ≒70)、右は ≒179(日時 + 設定)。
+    /// チップ 282 のとき左右は各 233 まで使えるので収まる
     private var navChip: some View {
         HStack(spacing: 8) {
             NavIcon(screenUpHeading: ride.travelHeading, size: 20)

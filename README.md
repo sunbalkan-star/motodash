@@ -17,6 +17,7 @@ iPhone X (iOS 16.7.x) + 無料Apple ID サイドロード運用前提。
 | マップ画面(モノクロ・3D/H-UP/N-UP) | ✅ 即動作 | `App/UI/MapDashView.swift`(Apple MapKit) |
 | 目的地案内(右左折・残り距離・再検索) | ✅ 要通信 | `App/Nav/NavManager.swift`(MKDirections。圏外は直線コンパス案内) |
 | GPX ルート表示 / 保存地点(給油・休憩) | ✅ 即動作 | 同上 + `App/UI/NavSheet.swift` |
+| 配色 4 種(LIME / ARCTIC / STEALTH / SUNLIGHT)・昼夜自動切替 | ✅ 即動作 | `App/UI/Theme.swift` + `ThemeManager.swift` + `SettingsView.swift` |
 
 ## TPMSセンサー購入後の連動手順
 
@@ -59,6 +60,9 @@ ios-template/
 │       ├── MapDashView.swift     # マップ画面(モノクロ MapKit + HUD)
 │       ├── NavSheet.swift        # 目的地検索・保存地点・GPX 読込
 │       ├── NavGlance.swift       # 案内アイコン・文言(マップ/ダッシュボード共通)
+│       ├── Theme.swift           # 配色 4 種のトークン(Palette)
+│       ├── ThemeManager.swift    # 配色の手動選択・昼夜自動切替
+│       ├── SettingsView.swift    # 設定画面
 │       └── SnifferView.swift     # BLEスニファー + センサー割当
 ├── Shared/SharedStore.swift      # App Group共有(Trip等)
 └── Widget/RideWidget.swift       # Trip距離ウィジェット
@@ -80,6 +84,8 @@ ios-template/
 - **目的地**: マップ右上の🔍で検索 / 保存地点から選択 / 停車中の操作モードで地図を長押し。
   案内中はダッシュボードにも表示(タップでマップへ)
 - **地点保存**: マップ右上のピンで現在地を給油・休憩・地点として保存
+- **設定(配色)**: ダッシュボード右上の歯車。手動で 4 種から選ぶか、時間帯で自動
+  (日の出・日の入り / 指定時刻で昼の配色・夜の配色を切替)
 - **停車中の地図操作**: 3km/h 未満で出る移動ボタン → 拡大縮小・スクロール。5km/h 以上で自動で追従に戻る
 - **画面は自動消灯しない**(`isIdleTimerDisabled`)。バッテリー消費に注意、給電マウント推奨
 
