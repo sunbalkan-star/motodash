@@ -96,7 +96,9 @@ struct MapDashView: View {
             }
             .coordinateSpace(name: HUDFrameKey.space)
             .onPreferenceChange(HUDFrameKey.self) { hudRects = $0 }
-            .frame(width: w, height: h)
+            // ZStack は地図(高さ 1.3h)の分だけ画面より縦に大きい。既定の中央揃えだと全体が 0.15h 上にずれ、
+            // 上ピル・ボタン・下ボックス・自車が上に押し出されるため、画面の上端に揃える
+            .frame(width: w, height: h, alignment: .topLeading)
             .clipped()
             .ignoresSafeArea()
             .contentShape(Rectangle())
