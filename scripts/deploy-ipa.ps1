@@ -48,17 +48,16 @@ function Get-Windows {
     if (-not $ids) { return @() }
     @($AE::RootElement.FindAll($Scope::Children, $True_) | Where-Object { $ids -contains $_.Current.ProcessId })
 }
-function Get-Main { Get-Windows | Where-Object { $_.Current.Name -like 'Sideloadly*' } | Select-Object -First 1 }
+# 起動直後は別のウィンドウを掴むことがあるので、使うたびに本体(QMainWindow)を取り直す
+function Get-Main { Get-Windows | Where-Object { $_.Current.ClassName -eq 'QMainWindow' } | Select-Object -First 1 }
 function Get-Texts($el) {
     @($el.FindAll($Scope::Descendants, $True_) | Where-Object {
         $_.Current.ControlType.ProgrammaticName -eq 'ControlType.Text' -and $_.Current.Name } | ForEach-Object { $_.Current.Name })
 }
+# 端末の項目は「名前 (iOS バージョン) UDID @USB」の形(Apple ID の項目とは別)
 function Get-Devices($main) {
-    $combo = $main.FindAll($Scope::Descendants, $True_) | Where-Object {
-        $_.Current.ControlType.ProgrammaticName -eq 'ControlType.ComboBox' -and $_.Current.Name -eq 'iDevice:' } | Select-Object -First 1
-    if (-not $combo) { return @() }
-    @($combo.FindAll($Scope::Descendants, $True_) | Where-Object {
-        $_.Current.ControlType.ProgrammaticName -eq 'ControlType.ListItem' -and $_.Current.Name -and $_.Current.Name -notmatch '^<' } | ForEach-Object { $_.Current.Name })
+    @($main.FindAll($Scope::Descendants, $True_) | Where-Object {
+        $_.Current.ControlType.ProgrammaticName -eq 'ControlType.ListItem' -and $_.Current.Name -match '\(\d+(\.\d+)+\).*@' } | ForEach-Object { $_.Current.Name })
 }
 
 # 前回の状態を持ち越さないよう起動し直し、IPA は引数で読み込ませる
@@ -70,7 +69,7 @@ while (-not ($main = Get-Main)) { if ((Get-Date) -gt $deadline) { throw 'Sideloa
 Start-Sleep 3
 
 $deadline = (Get-Date).AddSeconds($DeviceTimeoutSec)
-while (-not ($devices = Get-Devices $main)) {
+while (-not ($main = Get-Main) -or -not ($devices = @(Get-Devices $main))) {
     if ((Get-Date) -gt $deadline) { throw 'iPhone が見つかりません(USB 接続・ロック解除・「このコンピュータを信頼」を確認)' }
     Start-Sleep 2
 }
@@ -84,18 +83,21 @@ $start.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Inv
 Write-Host 'インストール開始'
 
 # 進行状況を表示しつつ完了 / 失敗 / ダイアログ(パスワード・2FA 等)を待つ
-$seen = @{}; $before | ForEach-Object { $seen[$_] = 1 }
+$seen = @{}; $before | ForEach-Object { $seen[$_] = 1 }; $lastChange = Get-Date
 $deadline = (Get-Date).AddSeconds($InstallTimeoutSec)
 while ($true) {
     if ((Get-Date) -gt $deadline) { throw 'インストールがタイムアウトしました' }
     $main = Get-Main
     if (-not $main) { throw 'Sideloadly が終了しました' }
     $texts = Get-Texts $main
-    foreach ($t in $texts) { if (-not $seen[$t]) { $seen[$t] = 1; Write-Host "  $t" } }
+    foreach ($t in $texts) { if (-not $seen[$t]) { $seen[$t] = 1; $lastChange = Get-Date; Write-Host "  $t" } }
+    # 「Installing... 90%」で止まるのは、iPhone 上の MotoDash が動いていて iOS が上書きできないとき。
+    # アプリを終了すれば Sideloadly はそのまま続きを進める(このスクリプトが終わっても待ち続ける)
+    if ($lastChange -and ((Get-Date) - $lastChange).TotalSeconds -gt 180) { throw "進行が 3 分止まっています($($texts[-2]) $($texts[-1]))。iPhone で MotoDash を上にスワイプして終了してください(終了すれば続きが進みます)" }
     $joined = $texts -join "`n"
-    if ($joined -match '(?im)^\s*Done\.?\s*$') { Write-Host '完了'; break }
+    if ($joined -match '(?im)^\s*Done\.?\s*$') { Write-Host '完了(iPhone で MotoDash を開き直してください)'; break }
     if ($joined -match '(?i)guru meditation|error|failed') { throw "Sideloadly がエラーを返しました: $(($texts | Select-String -Pattern 'error|failed|guru' -SimpleMatch:$false | Select-Object -First 1))" }
-    $dialogs = Get-Windows | Where-Object { $_.Current.Name -notlike 'Sideloadly*' }
+    $dialogs = Get-Windows | Where-Object { $_.Current.ClassName -ne 'QMainWindow' }
     foreach ($d in $dialogs) {
         $msg = (@($d.Current.Name) + (Get-Texts $d)) -join ' / '
         if (-not $seen["dlg:$msg"]) { $seen["dlg:$msg"] = 1; Write-Host "ダイアログ: $msg" }

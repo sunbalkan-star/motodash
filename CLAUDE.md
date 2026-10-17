@@ -69,4 +69,4 @@ Claude Code が Artifact ツールの **Design タイプ**（claude.ai のデザ
 - GitHub: https://github.com/sunbalkan-star/motodash.git
 - ローカル: `C:\Users\Tadashi\Downloads\ios-template`
 - push すると GitHub Actions が unsigned IPA をビルド。
-- **実機インストールは自動**: アプリのコードを main に push したら、続けて `pwsh scripts/deploy-ipa.ps1` をバックグラウンド実行する（CI 完了待ち → `Downloads\MotoDash-builds\<番号>\` に IPA 取得 → Sideloadly を UI Automation で操作して接続中の iPhone にインストール）。iPhone 未接続・Apple ID のパスワード / 2FA 入力を求められた等で止まったら、理由を伝えてユーザーに任せる（パスワードは Claude が入力しない）。取得だけなら `-DownloadOnly`。
+- **実機インストールは自動**: アプリのコードを main に push したら、続けて `pwsh scripts/deploy-ipa.ps1` をバックグラウンド実行する（CI 完了待ち → `Downloads\MotoDash-builds\<番号>\` に IPA 取得 → Sideloadly を UI Automation で操作して接続中の iPhone にインストール）。iPhone 未接続・Apple ID のパスワード / 2FA 入力を求められた等で止まったら、理由を伝えてユーザーに任せる（パスワードは Claude が入力しない）。取得だけなら `-DownloadOnly`。「Installing」で 3 分止まったら、iPhone 上で MotoDash が動いているのが原因（iOS が上書きできない）。ユーザーにアプリを上にスワイプして終了してもらえば続きが進む。プロファイル削除は不要（アプリのデータが消えるので勧めない）。

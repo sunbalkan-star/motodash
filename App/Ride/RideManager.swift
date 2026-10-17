@@ -43,6 +43,12 @@ final class RideManager: NSObject, ObservableObject {
     private let maxGapSeconds: TimeInterval = 10
     /// 2点間の見かけ速度がこれを超えたら測位ジャンプとして捨てる(m/s ≒ 300km/h)
     private let maxPlausibleMPS: Double = 300 / 3.6
+    /// バックグラウンドで停車がこの秒数続いたら計測を止め、iOS がアプリを休止できるようにする。
+    /// 動き続けたままだと上書きインストール(Sideloadly)が「Installing」で止まる。前面に戻れば再開
+    private let backgroundIdleStop: TimeInterval = 5 * 60
+    private var lastMovingDate = Date()
+    private var isInBackground = false
+    private var isIdleStopped = false
 
     override init() {
         super.init()
@@ -69,10 +75,51 @@ final class RideManager: NSObject, ObservableObject {
             self, selector: #selector(batteryChanged),
             name: UIDevice.batteryStateDidChangeNotification, object: nil
         )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(didEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification, object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(willEnterForeground),
+            name: UIApplication.willEnterForegroundNotification, object: nil
+        )
     }
 
     @objc private func batteryChanged() {
         refreshBattery()
+    }
+
+    @objc private func didEnterBackground() {
+        isInBackground = true
+        lastMovingDate = Date()   // 停車中に背面へ回した場合は、その時点から数える
+    }
+
+    @objc private func willEnterForeground() {
+        isInBackground = false
+        if isIdleStopped {
+            isIdleStopped = false
+            start()
+        }
+    }
+
+    /// バックグラウンドで停車が続いたら GPS・方位・気圧の計測を止める
+    private func checkBackgroundIdle() {
+        guard isInBackground, !isIdleStopped,
+              Date().timeIntervalSince(lastMovingDate) > backgroundIdleStop else { return }
+        isIdleStopped = true
+        manager.stopUpdatingLocation()
+        manager.stopUpdatingHeading()
+        if usesBarometer {
+            altimeter.stopAbsoluteAltitudeUpdates()
+            usesBarometer = false
+        }
+        fixWatchdog?.invalidate()
+        fixWatchdog = nil
+        hasGPSFix = false
+        smoothedSpeed = 0
+        speedKMH = 0
+        gpsStatus = "GPS待機中"
+        persist(force: true)
     }
 
     @objc private func orientationChanged() {
@@ -90,6 +137,10 @@ final class RideManager: NSObject, ObservableObject {
         if CLLocationManager.headingAvailable() {
             // 方位は端末の向き基準で返るため、横マウント時は向きを伝えないと90°ずれる
             UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            // start() は休止明けにも呼ばれるので、購読が二重にならないよう外してから付け直す
+            NotificationCenter.default.removeObserver(
+                self, name: UIDevice.orientationDidChangeNotification, object: nil
+            )
             NotificationCenter.default.addObserver(
                 self, selector: #selector(orientationChanged),
                 name: UIDevice.orientationDidChangeNotification, object: nil
@@ -99,7 +150,10 @@ final class RideManager: NSObject, ObservableObject {
         }
         if fixWatchdog == nil {
             fixWatchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.checkFixTimeout() }
+                Task { @MainActor in
+                    self?.checkFixTimeout()
+                    self?.checkBackgroundIdle()
+                }
             }
         }
         // 走行中の画面消灯を防止(バイク用ダッシュボードの必須設定)
@@ -256,6 +310,7 @@ extension RideManager: CLLocationManagerDelegate {
         smoothedSpeed = smoothedSpeed * 0.3 + rawKMH * 0.7
         speedKMH = smoothedSpeed < 1 ? 0 : smoothedSpeed
         if speedKMH > maxSpeedKMH { maxSpeedKMH = speedKMH }
+        if speedKMH >= movingThresholdKMH { lastMovingDate = Date() }
 
         if let last = lastLocation, speedKMH >= movingThresholdKMH {
             // 測位時刻ベースで間隔を測る。空白が長すぎる(バックグラウンド停止・長いロスト明け)
