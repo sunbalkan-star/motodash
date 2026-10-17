@@ -13,22 +13,37 @@ iPhone をバイクのハンドルにマウントするデジタルメーター�
 
 **絶対に表示しない**（OBD-II/CAN 非接続で取得不可）: rpm・スロットル・油温・水温・車両バッテリー・燃料・ギア。これらを出すと "ウソの UI" になる。
 
-## Claude Code ⇄ Claude Design ブリッジ（コピペ最小化ワークフロー）
+## Claude Code ⇄ Claude Design ブリッジ
 
-Claude Code（コード）と Claude Design（ビジュアル）の間はファイルで橋渡しする。固定パスを使い、口頭でパスを伝える手間をなくす。
+### 基本ルート：Design キャンバス直結（ユーザーの手動の行き来なし）
+Claude Code が Artifact ツールの **Design タイプ**（claude.ai のデザインキャンバス）を直接作成・読み取りする。ユーザーはリンクを開いて見るだけ。コピペ・ファイル保存は不要。
 
-### 固定パス
+- **「デザイン案作って（コンセプト）」** →
+  1. 現行 SwiftUI（`DashboardView.swift`・`MapDashView.swift`・`Theme.swift`・`GaugeBar.swift`）から実寸・トークン・状態色を読み取る。
+  2. `design\DESIGN_RULES.md` の制約（データ制約・SwiftUI 移植ルール・レイアウト鉄則・トークン・状態色）を守り、Design タイプで**新規キャンバス**を作る。横 812×375・縦 375×812 を必ず両方。案が複数なら案ごとに 1 アートボードにし、共通の画面は 1 ファイルに書いて `<dc-import>` で使い回す。状態色が確認できるサンプル値（例: 後輪 注意）と、案内中の状態を入れる。
+  3. 作成後は Chrome（claude-in-chrome）でキャンバスを開いてレイアウト崩れ（はみ出し・重なり・見切れ）を確認し、あれば直す（ユーザーの常設指示）。確認用に開いたタブは閉じる。
+  4. `design\CANVASES.md` に 日付・タイトル・URL・案・状態 を追記し、リンクと各案の狙いを返す。
+  - コンセプトが無い・「おまかせ」なら聞き返さず、現行踏襲で案を作る。
+- **「デザイン直して（指示）」** → 直近（または指定）のキャンバスを**更新**する（新規作成しない）。ユーザーがキャンバス上で手編集している可能性があるので、変更するアートボードは読み直してから直す。直した後は 3 と同じ確認をする。
+- **「（案名）で実装して」** → 指定キャンバスを Artifact `read` で読み、その案のアートボード（`project/*.dc.html`）を SwiftUI へ移植する（下の「移植時の注意」「レイアウト収まり確認」に従う）。`CANVASES.md` の状態を「実装済み（コミット）」に更新。
+- **テスト扱い**と言われたキャンバスは実装せず、`CANVASES.md` の状態を「保留」にする。
+- キャンバスは非公開で作られる。他人に見せるときはユーザーがページの共有メニューから共有する（Claude Code からは共有設定を変えられない）。
+
+### 予備ルート：Claude Design アプリを手で使う場合（従来のファイル受け渡し）
 | 方向 | パス | 役割 |
 |---|---|---|
-| 恒久ルール | `C:\Users\Tadashi\Downloads\design\DESIGN_RULES.md` | Design に一度貼る恒久ルール（データ制約・崩れ防止・レイアウト鉄則・トークン）。Code が更新したらここに反映 |
+| 恒久ルール | `C:\Users\Tadashi\Downloads\design\DESIGN_RULES.md` | Design に一度貼る恒久ルール（データ制約・崩れ防止・レイアウト鉄則・トークン）。Code が更新したらここに反映。基本ルートでも Claude Code が参照する |
 | Code → Design | `C:\Users\Tadashi\Downloads\design\PROMPT.md` | Claude Code が現状レイアウトをまとめてここに **上書き** する。ユーザーは開いてコピーするだけ |
 | Design → Code | `C:\Users\Tadashi\Downloads\design\MotoDash.dc.html` | ユーザーが Claude Design の出力 HTML をここに **上書き保存**。Claude Code はここを読んで SwiftUI へ移植 |
+| キャンバス台帳 | `C:\Users\Tadashi\Downloads\design\CANVASES.md` | 基本ルートで作ったキャンバスの一覧（Claude Code が追記・更新） |
 | 仕様参照 | `C:\Users\Tadashi\Downloads\design\README.md` | デザイントークン・状態色の正典 |
 
-### 合言葉（ユーザーが言ったら自動実行）
-- **「デザイン用プロンプト出して」** → `App/UI/DashboardView.swift` の現状（レイアウト構成・サイズ・トークン・状態色）を読み取り、`design\PROMPT.md` に完結型プロンプトとして上書き。**必ず「# SwiftUI 実装制約（レイアウト崩れ防止）」セクションを含める**（実機 pt キャンバス固定 / SF Pro 字幅の余白 / 素直な flex のみ / overflow 非依存）。最後の「# 私のデザインコンセプト」欄は空にしておき、ユーザーがそこだけ書き換えて使う。完了後「PROMPT.md を開いてコピーしてください」と返す。
-- **「デザイン更新して」/「デザイン反映して」** → `design\MotoDash.dc.html` を読み、現行 SwiftUI（`DashboardView.swift`・`Theme.swift`・`GaugeBar.swift`）との差分を実装。レイアウト変更のみで、データ配線やビジネスロジックは触らない。
-- どちらも、変更後は `feat/...` ブランチにコミット→必要なら main へマージ→push（CI ビルドのため）。
+- **「デザイン用プロンプト出して」** → `App/UI/DashboardView.swift`（とマップ画面）の現状（レイアウト構成・サイズ・トークン・状態色）を読み取り、`design\PROMPT.md` に完結型プロンプトとして上書き。**必ず「# SwiftUI 実装制約（レイアウト崩れ防止）」セクションを含める**（実機 pt キャンバス固定 / SF Pro 字幅の余白 / 素直な flex のみ / overflow 非依存）。最後の「# 私のデザインコンセプト」欄は空にしておき、ユーザーがそこだけ書き換えて使う。完了後「PROMPT.md を開いてコピーしてください」と返す。
+- **「デザイン更新して」** → `design\MotoDash.dc.html` を読み、現行 SwiftUI（`DashboardView.swift`・`MapDashView.swift`・`Theme.swift`・`GaugeBar.swift`）との差分を実装。レイアウト変更のみで、データ配線やビジネスロジックは触らない。ファイルが前回反映時から更新されていなければ、反映せずにそう伝える。
+- **「デザイン反映して」**（どちらのルートか言わなかった場合）→ `MotoDash.dc.html` の更新日時と `CANVASES.md` の最新エントリを比べ、新しい方を使う。
+
+### 共通
+- 実装した変更は `feat/...` ブランチにコミット→必要なら main へマージ→push（CI ビルドのため）。
 
 ### 移植時の注意
 - HTML をそのまま使わない。SwiftUI ネイティブ描画（Shape / Path / Text / SF Symbols）で再現する。
