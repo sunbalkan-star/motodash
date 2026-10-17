@@ -854,7 +854,7 @@ struct MonoMapView: UIViewRepresentable {
         }
 
         /// 線種(地図はモノクロ化されるため明度と線幅・破線で区別)
-        ///   案内ルート = 暗い地図では白 7pt・明るい地図では白 5pt + 濃いグレーの縁(全幅 9pt)
+        ///   案内ルート = 暗い地図では白 7pt・明るい地図では白 5pt + ほぼ黒の縁(全幅 11pt)
         ///   GPX = 同系 60% 破線 4pt / 走行軌跡 = グレー 4pt
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
@@ -868,8 +868,9 @@ struct MonoMapView: UIViewRepresentable {
             // 明度 0.68 で描き、画面上で ≒0.3 の濃いグレーに見えるようにする
             let ink = Palette.isLight ? UIColor(white: 0.68, alpha: 1) : UIColor(Palette.textHi)
             if isRoute, let cased = r as? CasedPolylineRenderer {
-                cased.casingColor = ink
-                cased.casingWidth = 9
+                // 縁は明度 0.62(補正後 ≒0.15 のほぼ黒)・全幅 11pt(片側 3pt)。0.68 / 9pt では目立たなかった
+                cased.casingColor = UIColor(white: 0.62, alpha: 1)
+                cased.casingWidth = 11
                 r.strokeColor = .white
                 r.lineWidth = 5
             } else if isRoute {
