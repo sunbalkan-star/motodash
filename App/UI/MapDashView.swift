@@ -61,16 +61,11 @@ struct MapDashView: View {
 
             ZStack(alignment: .topLeading) {
                 // 地図は高さを (vy×2) 倍にして、カメラ中心 = 自車位置が vy に来るようにする。
-                // はみ出した下側は画面外。Apple の法的表記は layoutMargins で下ボックスの上に出す
+                // はみ出した下側は画面外(Apple の地図ロゴ・Legal もそちらに出るので画面には映らない)
                 MonoMapView(location: ride.location,
                             heading: northUp ? 0 : travelHeading,
                             distance: cameraDistance,
                             pitch: viewMode.pitch,
-                            legalMargins: UIEdgeInsets(
-                                // 左下のズームボタン(w44)の右に出す
-                                top: 0, left: insets.leading + 44 + 8,
-                                bottom: h * (vy * 2 - 1) + insets.bottom + boxHeight + 8,
-                                right: insets.trailing),
                             interactive: interactive,
                             route: nav.route?.polyline,
                             routeVersion: nav.routeVersion,
@@ -575,7 +570,6 @@ struct MonoMapView: UIViewRepresentable {
     var distance: Double
     /// カメラの傾き(度)。0 より大きい時は建物・地形も立体表示にする
     var pitch: Double
-    var legalMargins: UIEdgeInsets
     /// true=停車中の操作モード(追従を止め、拡大縮小・スクロール・長押しを許可)
     var interactive: Bool
     var route: MKPolyline?
@@ -601,6 +595,10 @@ struct MonoMapView: UIViewRepresentable {
         map.showsUserLocation = false
         // false だとカメラの pitch 自体が無視される(常に真上から)ため有効にしておく
         map.isPitchEnabled = true
+        // MapKit はレイアウト余白・セーフエリアを「隠れた領域」とみなし、カメラ中心をその内側の中央に置く。
+        // 余白があると自車(フレーム中央)と地図上の現在地がずれるため、余白は常にゼロにする
+        map.insetsLayoutMarginsFromSafeArea = false
+        map.layoutMargins = .zero
         map.delegate = context.coordinator
         let press = UILongPressGestureRecognizer(target: context.coordinator,
                                                  action: #selector(Coordinator.handleLongPress(_:)))
@@ -614,7 +612,6 @@ struct MonoMapView: UIViewRepresentable {
         // 走行中はタッチを SwiftUI 側(スワイプ切替・タップでノースアップ)へ通す
         map.isUserInteractionEnabled = interactive
         map.showsUserLocation = interactive   // 操作モード中は自車矢印の代わりに青点(グレー)で現在地を示す
-        if map.layoutMargins != legalMargins { map.layoutMargins = legalMargins }
         if c.realistic != (pitch > 0) {
             c.realistic = pitch > 0
             map.preferredConfiguration = Self.configuration(realistic: c.realistic)

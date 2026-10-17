@@ -254,7 +254,8 @@ final class NavManager: ObservableObject {
         }
         stepSymbols = steps.indices.map { i in
             guard i > 0 else { return "arrow.up" }
-            return Geo.maneuverSymbol(incoming: steps[i - 1].polyline.coordinates,
+            return Geo.maneuverSymbol(instruction: steps[i].instructions,
+                                      incoming: steps[i - 1].polyline.coordinates,
                                       outgoing: steps[i].polyline.coordinates)
         }
     }
@@ -357,6 +358,30 @@ enum Geo {
     }
 
     /// 前ステップ終端の進入方向と次ステップ始端の進出方向の折れ角から、操作アイコンを決める
+    /// 操作アイコン。案内文に左右の言葉があればそれを優先し(分岐で「左方向」なのに道なりは右へ曲がる、
+    /// のような所で形だけだと逆向きになるため)、無ければルートの折れ角で判定する
+    static func maneuverSymbol(instruction: String,
+                               incoming: [CLLocationCoordinate2D],
+                               outgoing: [CLLocationCoordinate2D]) -> String {
+        if let symbol = symbolFromInstruction(instruction) { return symbol }
+        return maneuverSymbol(incoming: incoming, outgoing: outgoing)
+    }
+
+    /// 案内文(日本語 / 英語)から左右と曲がり具合を読む。読めなければ nil
+    static func symbolFromInstruction(_ text: String) -> String? {
+        let t = text.lowercased()
+        if t.contains("uターン") || t.contains("u-turn") || t.contains("u turn") { return "arrow.uturn.down" }
+        let left = ["左折", "turn left", "sharp left"]
+        let right = ["右折", "turn right", "sharp right"]
+        let slightLeft = ["左方向", "左側の車線", "左に進", "keep left", "bear left", "slight left", "左寄り"]
+        let slightRight = ["右方向", "右側の車線", "右に進", "keep right", "bear right", "slight right", "右寄り"]
+        if left.contains { t.contains($0) } { return "arrow.turn.up.left" }
+        if right.contains { t.contains($0) } { return "arrow.turn.up.right" }
+        if slightLeft.contains { t.contains($0) } { return "arrow.up.left" }
+        if slightRight.contains { t.contains($0) } { return "arrow.up.right" }
+        return nil
+    }
+
     static func maneuverSymbol(incoming: [CLLocationCoordinate2D],
                                outgoing: [CLLocationCoordinate2D]) -> String {
         guard let inEnd = incoming.last, let outStart = outgoing.first,
