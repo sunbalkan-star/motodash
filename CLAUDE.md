@@ -68,4 +68,5 @@ Claude Code が Artifact ツールの **Design タイプ**（claude.ai のデザ
 ## リポジトリ
 - GitHub: https://github.com/sunbalkan-star/motodash.git
 - ローカル: `C:\Users\Tadashi\Downloads\ios-template`
-- push すると GitHub Actions が unsigned IPA をビルド。実機確認は AltStore 経由。
+- push すると GitHub Actions が unsigned IPA をビルド。
+- **実機インストールは自動**: アプリのコードを main に push したら、続けて `pwsh scripts/deploy-ipa.ps1` をバックグラウンド実行する（CI 完了待ち → `Downloads\MotoDash-builds\<番号>\` に IPA 取得 → Sideloadly を UI Automation で操作して接続中の iPhone にインストール）。iPhone 未接続・Apple ID のパスワード / 2FA 入力を求められた等で止まったら、理由を伝えてユーザーに任せる（パスワードは Claude が入力しない）。取得だけなら `-DownloadOnly`。
