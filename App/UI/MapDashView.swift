@@ -79,7 +79,8 @@ struct MapDashView: View {
                                 nav.setDestination(name: "地図で指定", coordinate: coord)
                             })
                     .saturation(0)
-                    .contrast(1.15)
+                    // 明るい地図は全体が薄く道路の縁取りが見えにくいため、コントラストを強めて縁を濃くする
+                    .contrast(Palette.isLight ? 1.45 : 1.15)
                     .frame(width: w, height: h * vy * 2)
 
                 // 夜間ディム(地図のみ。HUD は暗くしない)
@@ -653,10 +654,11 @@ struct MonoMapView: UIViewRepresentable {
         map.setCamera(camera, animated: !first)
     }
 
-    /// モノクロ用の地図設定。realistic=建物・地形の立体表示(対応地域のみ。非対応地域は平面のまま)
+    /// モノクロ用の地図設定。realistic=建物・地形の立体表示(対応地域のみ。非対応地域は平面のまま)。
+    /// 明るい配色では muted だと道路が背景に溶けるので標準の強調にする
     private static func configuration(realistic: Bool) -> MKStandardMapConfiguration {
         let config = MKStandardMapConfiguration(elevationStyle: realistic ? .realistic : .flat,
-                                                emphasisStyle: .muted)
+                                                emphasisStyle: Palette.isLight ? .default : .muted)
         config.pointOfInterestFilter = .excludingAll
         config.showsTraffic = false
         return config
