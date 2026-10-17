@@ -859,7 +859,9 @@ struct MonoMapView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let line = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
             let isRoute = line === routeLine
-            let r = isRoute && Palette.isLight ? CasedPolylineRenderer(polyline: line) : MKPolylineRenderer(polyline: line)
+            let r: MKPolylineRenderer = isRoute && Palette.isLight
+                ? CasedPolylineRenderer(polyline: line)
+                : MKPolylineRenderer(polyline: line)
             r.lineCap = .round
             r.lineJoin = .round
             // 明るい地図は線ごと「明るさ -0.26 → コントラスト 2.5」で濃くされる。黒だと真っ黒になるので
