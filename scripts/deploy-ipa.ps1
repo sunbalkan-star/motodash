@@ -46,7 +46,9 @@ $True_ = [System.Windows.Automation.Condition]::TrueCondition
 function Get-Windows {
     $ids = @(Get-Process sideloadly -ErrorAction SilentlyContinue | ForEach-Object Id)
     if (-not $ids) { return @() }
-    @($AE::RootElement.FindAll($Scope::Children, $True_) | Where-Object { $ids -contains $_.Current.ProcessId })
+    # ウィンドウの生成・破棄の最中は UIA が E_UNEXPECTED を投げることがあるので、その回は空扱いにして取り直す
+    try { @($AE::RootElement.FindAll($Scope::Children, $True_) | Where-Object { $ids -contains $_.Current.ProcessId }) }
+    catch { @() }
 }
 # 起動直後は別のウィンドウを掴むことがあるので、使うたびに本体(QMainWindow)を取り直す
 function Get-Main { Get-Windows | Where-Object { $_.Current.ClassName -eq 'QMainWindow' } | Select-Object -First 1 }
@@ -56,8 +58,10 @@ function Get-Texts($el) {
 }
 # 端末の項目は「名前 (iOS バージョン) UDID @USB」の形(Apple ID の項目とは別)
 function Get-Devices($main) {
-    @($main.FindAll($Scope::Descendants, $True_) | Where-Object {
-        $_.Current.ControlType.ProgrammaticName -eq 'ControlType.ListItem' -and $_.Current.Name -match '\(\d+(\.\d+)+\).*@' } | ForEach-Object { $_.Current.Name })
+    try {
+        @($main.FindAll($Scope::Descendants, $True_) | Where-Object {
+            $_.Current.ControlType.ProgrammaticName -eq 'ControlType.ListItem' -and $_.Current.Name -match '\(\d+(\.\d+)+\).*@' } | ForEach-Object { $_.Current.Name })
+    } catch { @() }
 }
 
 # 前回の状態を持ち越さないよう起動し直し、IPA は引数で読み込ませる
